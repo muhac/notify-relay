@@ -1,0 +1,43 @@
+name: Test
+
+# Runs on PRs and main: typecheck, tests inside the Workers runtime, and a dry-run bundle. The
+# typecheck is a separate step because wrangler bundles with esbuild, which strips types without
+# checking them. Nothing here deploys; deployments pick a commit and run wrangler themselves.
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Bundle
+        run: npm run build
