@@ -72,7 +72,9 @@ at-least-once: an occasional duplicate is preferred to a silent loss, and `key` 
 duplicates.
 
 Each channel attempt times out after 5 seconds, enforced by the relay rather than left to the adapter.
-A 429 whose `Retry-After` is at most 2 seconds is retried once within the request.
+A 429 whose `Retry-After` is a number of seconds no greater than 2 is retried once within the request.
+A missing `Retry-After`, an HTTP date or a longer wait counts as a failure rather than blocking the
+request; the caller retries.
 
 ### Health
 
