@@ -1,4 +1,4 @@
 import type { Outbound } from '../core/deliver'
 import { loki } from './loki'
 
-export const outbounds: Record<string, Outbound> = Object.fromEntries([loki].map((outbound) => [outbound.name, outbound]))
+export const adapters: Record<string, Outbound> = Object.fromEntries([loki].map((adapter) => [adapter.type, adapter]))

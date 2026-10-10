@@ -1,10 +1,11 @@
 import { authenticate, hasSources } from './core/auth'
+import { type Channel, resolveChannels } from './core/channels'
 import { deliver, type Outcome } from './core/deliver'
 import { BadRequest } from './core/http'
 import type { Inbound } from './core/message'
 import { parseChannels } from './core/query'
 import { webhook } from './inbound/webhook'
-import { outbounds } from './outbound'
+import { adapters } from './outbound'
 
 export interface AppDeps {
     fetch: typeof fetch
@@ -22,7 +23,7 @@ export async function handle(request: Request, env: Env, deps: AppDeps): Promise
     const url = new URL(request.url)
     if (url.pathname === '/healthz') {
         if (request.method !== 'GET') return methodNotAllowed('GET')
-        return ready(env) ? new Response('ok') : new Response('not ready', { status: 503 })
+        return ready(resolveChannels(env, adapters), env) ? new Response('ok') : new Response('not ready', { status: 503 })
     }
 
     const inbound = inbounds[url.pathname]
@@ -32,7 +33,8 @@ export async function handle(request: Request, env: Env, deps: AppDeps): Promise
     const source = authenticate(request.headers.get('authorization'), env)
     if (!source) return new Response(null, { status: 401, headers: { 'www-authenticate': 'Bearer' } })
 
-    const routing = parseChannels(url, Object.keys(outbounds))
+    const channels = resolveChannels(env, adapters)
+    const routing = parseChannels(url, [...channels.keys()])
     if ('error' in routing) return badRequest(routing.error)
 
     const raw = await readBody(request)
@@ -49,7 +51,7 @@ export async function handle(request: Request, env: Env, deps: AppDeps): Promise
 
     const outcomes: Outcome[] = []
     for (const draft of drafts) {
-        outcomes.push(await deliver({ ...draft, source }, routing.channels, routing.fallback, { ...deps, env, outbounds }))
+        outcomes.push(await deliver({ ...draft, source }, routing.channels, routing.fallback, { ...deps, channels }))
     }
     return Response.json(
         { messages: outcomes.map(({ delivered, failed }) => ({ delivered, failed })) },
@@ -57,13 +59,12 @@ export async function handle(request: Request, env: Env, deps: AppDeps): Promise
     )
 }
 
-// Does not say what is missing: /healthz is unauthenticated
-function ready(env: Env): boolean {
-    const values = env as unknown as Record<string, unknown>
-    const channelsReady = Object.values(outbounds).every((outbound) =>
-        outbound.requires.every((name) => typeof values[name] === 'string' && values[name] !== ''),
-    )
-    return channelsReady && hasSources(env)
+// Ready when at least one channel is configured, every configured channel has a known type and all
+// its parameters, and some source can authenticate. Says nothing more: /healthz is unauthenticated
+function ready(channels: Map<string, Channel>, env: Env): boolean {
+    const configured = [...channels.values()]
+    const complete = configured.every((channel) => channel.adapter !== undefined && channel.missing.length === 0)
+    return configured.length > 0 && complete && hasSources(env)
 }
 
 // Counts while reading and stops past the limit: Content-Length is not trusted, and an oversized

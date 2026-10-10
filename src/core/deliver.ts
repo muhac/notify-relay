@@ -1,24 +1,24 @@
+import type { Channel } from './channels'
 import { RateLimited } from './http'
 import type { Message } from './message'
 
 export interface SendContext {
     fetch: typeof fetch
-    env: Env
     now: () => number
     signal: AbortSignal
 }
 
+// A channel type. Each configured channel of this type hands send() its own parameters
 export interface Outbound {
-    name: string
-    // Variables and secrets the channel needs. Deploys do not check them; /healthz reports any missing
-    requires: readonly string[]
-    send(message: Message, ctx: SendContext): Promise<void>
+    type: string
+    // Read from CHANNEL_<NAME>_<PARAM>; deploys do not check them, /healthz reports any missing
+    params: readonly string[]
+    send(message: Message, params: Record<string, string>, ctx: SendContext): Promise<void>
 }
 
 export interface Deps {
-    outbounds: Record<string, Outbound>
+    channels: Map<string, Channel>
     fetch: typeof fetch
-    env: Env
     now: () => number
     sleep: (ms: number) => Promise<void>
     timeoutMs?: number
@@ -59,13 +59,16 @@ export async function deliver(message: Message, channels: string[], fallback: st
 }
 
 // undefined on success, otherwise the reason it failed
-async function attempt(message: Message, channel: string, deps: Deps): Promise<string | undefined> {
-    const outbound = deps.outbounds[channel]
-    if (!outbound) return 'unknown channel'
+async function attempt(message: Message, name: string, deps: Deps): Promise<string | undefined> {
+    const channel = deps.channels.get(name)
+    if (!channel) return 'unknown channel'
+    const { adapter, params, missing } = channel
+    if (!adapter) return `unknown type '${channel.type}'`
+    if (missing.length > 0) return `missing ${missing.join(', ')}`
     for (let retried = false; ; retried = true) {
         try {
             await withTimeout(
-                (signal) => outbound.send(message, { fetch: deps.fetch, env: deps.env, now: deps.now, signal }),
+                (signal) => adapter.send(message, params, { fetch: deps.fetch, now: deps.now, signal }),
                 deps.timeoutMs ?? TIMEOUT_MS,
             )
             return undefined
