@@ -1,0 +1,10 @@
+{
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "name": "notify-relay",
+    "main": "src/index.ts",
+    "compatibility_date": "2026-10-01",
+    // Off by default: expose the Worker on a domain you choose. No routes here either, so a deploy
+    // never touches custom domains managed elsewhere (e.g. by Terraform).
+    "workers_dev": false,
+    "preview_urls": false
+}
