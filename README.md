@@ -33,10 +33,11 @@ way; for an adapter that translates a third-party payload, the body is that payl
 
 | Query | Required | Meaning |
 |---|---|---|
-| `channels` | yes | Primary group, comma-separated, delivered in parallel |
+| `channels` | yes | Primary group: names of configured channels, comma-separated, delivered in parallel |
 | `fallback` | no | Tried in order, only when the whole primary group failed, until one succeeds |
 
-An unknown channel, a channel in both groups or a missing `channels` is a 400.
+A channel that is not configured, a channel in both groups or a missing `channels` is a 400. Channel
+names are the deployment's own (see [Channels](#channels)), not channel types.
 
 `/webhook` takes the relay's own format:
 
@@ -78,9 +79,11 @@ request; the caller retries.
 
 ### Health
 
-`GET /healthz` needs no token and calls no channel. It answers 200 when every channel has its settings
-and at least one source token exists, and 503 otherwise, without saying what is missing. Deploys do not
-check settings (see [Configuration](#configuration)), so point an external probe here.
+`GET /healthz` needs no token and calls no channel. It answers 200 when at least one channel is
+configured, every configured channel has a known type and all of that type's parameters, and at least
+one source token exists; 503 otherwise, without saying what is missing. Channel types nobody configured
+are not checked. Deploys do not check settings (see [Configuration](#configuration)), so point an
+external probe here.
 
 ## Authentication
 
@@ -101,6 +104,28 @@ printf 'nr_%s\n' "$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
 
 ## Channels
 
+A *channel type* is code (`loki`); a *channel* is a configured instance of one, named by the deployment.
+A deployment can configure several channels of the same type and none of another. Each channel is a set
+of Worker bindings:
+
+```text
+CHANNEL_<NAME>_TYPE     the type, e.g. loki; declares the channel
+CHANNEL_<NAME>_<PARAM>  one per parameter of that type
+```
+
+The channel's name is `<NAME>` in lowercase with `_` turned into `-`, so `CHANNEL_HOME_LAB_TYPE` declares
+`home-lab`, used as `?channels=home-lab`. Parameters are looked up by their exact names. To the Worker a
+variable and a secret are the same binding; keep the sensitive parameters as secrets.
+
+```text
+CHANNEL_LOGS_TYPE=loki                  # variable
+CHANNEL_LOGS_URL=https://logs-prod-000.grafana.net/loki/api/v1/push
+CHANNEL_LOGS_USER=123456
+CHANNEL_LOGS_TOKEN=...                  # secret
+CHANNEL_ARCHIVE_TYPE=loki               # a second channel of the same type
+...
+```
+
 ### `loki`
 
 Pushes each message as one log line to Loki's `/loki/api/v1/push` with basic auth. Labels hold only
@@ -108,11 +133,11 @@ low-cardinality fields (`job="notify-relay"`, `source`, `level`); the rest of th
 JSON. Handy as a first channel: a line you can query is a positive signal that delivery works, and it
 doubles as a record of everything sent.
 
-| Setting | Kind | Meaning |
+| Parameter | Keep as | Meaning |
 |---|---|---|
-| `LOKI_PUSH_URL` | variable | e.g. `https://logs-prod-000.grafana.net/loki/api/v1/push` |
-| `LOKI_USER` | variable | Basic auth user (the Loki instance ID on Grafana Cloud) |
-| `LOKI_TOKEN` | secret | Basic auth password; on Grafana Cloud, an access policy token with `logs:write` only |
+| `URL` | variable | e.g. `https://logs-prod-000.grafana.net/loki/api/v1/push` |
+| `USER` | variable | Basic auth user (the Loki instance ID on Grafana Cloud) |
+| `TOKEN` | secret | Basic auth password; on Grafana Cloud, an access policy token with `logs:write` only |
 
 ## Configuration
 
@@ -121,8 +146,8 @@ set on the Worker:
 
 ```bash
 npm ci
-npx wrangler deploy --var LOKI_PUSH_URL:https://... --var LOKI_USER:123456
-npx wrangler secret put LOKI_TOKEN
+npx wrangler deploy --var CHANNEL_LOGS_TYPE:loki --var CHANNEL_LOGS_URL:https://... --var CHANNEL_LOGS_USER:123456
+npx wrangler secret put CHANNEL_LOGS_TOKEN
 npx wrangler secret put TOKEN_GITHUB
 ```
 
@@ -154,8 +179,9 @@ every wrangler release. Outbound adapters get `fetch` passed in, so tests assert
 
 - Inbound: implement `Inbound` (`parse(body) → Draft[]`, throwing `BadRequest` on invalid input) and map
   a path to it in `src/app.ts`.
-- Outbound: implement `Outbound` (`name`, `requires`, `send`), register it in `src/outbound/index.ts`
-  and type its settings in `src/env.d.ts`. `requires` is what `/healthz` checks.
+- Outbound: implement `Outbound` (`type`, `params`, `send(message, params, ctx)`) and register it in
+  `src/outbound/index.ts`. `send` gets the channel's own parameters, never the environment; `params` is
+  what a channel of the type must configure and what `/healthz` checks. `TYPE` is reserved.
 
 ### Contract
 

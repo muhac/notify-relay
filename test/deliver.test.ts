@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { Channel } from '../src/core/channels'
 import { deliver, type Outbound } from '../src/core/deliver'
 import { RateLimited } from '../src/core/http'
 import type { Message } from '../src/core/message'
@@ -8,11 +9,11 @@ const message: Message = { source: 'test', title: 'hello', level: 'normal' }
 type Behaviour = 'ok' | 'fail' | 'hang' | number
 
 // Each call consumes the next behaviour; a number means 429 asking to wait that many milliseconds
-function outbound(name: string, behaviours: Behaviour[], calls: string[]): Outbound {
-    return {
-        name,
-        requires: [],
-        async send(_msg, ctx) {
+function channel(name: string, behaviours: Behaviour[], calls: string[]): Channel {
+    const adapter: Outbound = {
+        type: 'fake',
+        params: [],
+        async send(_msg, _params, ctx) {
             calls.push(name)
             const next = behaviours.shift() ?? 'ok'
             if (next === 'fail') throw new Error('HTTP 500')
@@ -22,16 +23,18 @@ function outbound(name: string, behaviours: Behaviour[], calls: string[]): Outbo
             }
         },
     }
+    return { name, type: 'fake', adapter, params: {}, missing: [] }
 }
 
-function setup(spec: Record<string, Behaviour[]>) {
+function setup(spec: Record<string, Behaviour[]>, extra: Channel[] = []) {
     const calls: string[] = []
     const sleeps: number[] = []
-    const outbounds = Object.fromEntries(Object.entries(spec).map(([name, b]) => [name, outbound(name, b, calls)]))
+    const channels = new Map<string, Channel>(
+        [...Object.entries(spec).map(([name, b]) => channel(name, b, calls)), ...extra].map((c) => [c.name, c]),
+    )
     const deps = {
-        outbounds,
+        channels,
         fetch: async () => new Response(null),
-        env: {} as Env,
         now: () => 0,
         sleep: async (ms: number) => void sleeps.push(ms),
         timeoutMs: 20,
@@ -102,5 +105,18 @@ describe('deliver', () => {
         const outcome = await deliver(message, ['a'], [], deps)
         expect(outcome.failed).toEqual([{ channel: 'a', error: 'rate limited' }])
         expect(calls).toEqual(['a', 'a'])
+    })
+
+    it('fails a channel that is missing parameters without calling it', async () => {
+        const broken: Channel = { ...channel('logs', ['ok'], []), missing: ['USER', 'TOKEN'] }
+        const { deps } = setup({}, [broken])
+        const outcome = await deliver(message, ['logs'], [], deps)
+        expect(outcome.failed).toEqual([{ channel: 'logs', error: 'missing USER, TOKEN' }])
+    })
+
+    it('fails a channel of an unknown type', async () => {
+        const { deps } = setup({}, [{ name: 'pager', type: 'pagerduty', params: {}, missing: [] }])
+        const outcome = await deliver(message, ['pager'], [], deps)
+        expect(outcome.failed).toEqual([{ channel: 'pager', error: "unknown type 'pagerduty'" }])
     })
 })

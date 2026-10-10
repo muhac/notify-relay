@@ -8,9 +8,10 @@ export default defineConfig({
             // Real deployments get these from `--var` and `wrangler secret put`; tests use placeholders
             miniflare: {
                 bindings: {
-                    LOKI_PUSH_URL: 'https://logs.example/loki/api/v1/push',
-                    LOKI_USER: '123456',
-                    LOKI_TOKEN: 'test-loki-token',
+                    CHANNEL_LOKI_TYPE: 'loki',
+                    CHANNEL_LOKI_URL: 'https://logs.example/loki/api/v1/push',
+                    CHANNEL_LOKI_USER: '123456',
+                    CHANNEL_LOKI_TOKEN: 'test-loki-token',
                     TOKEN_TEST: 'nr_test',
                 },
             },

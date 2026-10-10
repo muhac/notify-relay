@@ -2,17 +2,21 @@ import { describe, expect, it } from 'vitest'
 import { handle } from '../src/app'
 
 const env = {
-    LOKI_PUSH_URL: 'https://logs.example/loki/api/v1/push',
-    LOKI_USER: '123456',
-    LOKI_TOKEN: 'glc_secret',
+    CHANNEL_LOKI_TYPE: 'loki',
+    CHANNEL_LOKI_URL: 'https://logs.example/loki/api/v1/push',
+    CHANNEL_LOKI_USER: '123456',
+    CHANNEL_LOKI_TOKEN: 'glc_secret',
     TOKEN_GITHUB: 'nr_github',
 } as unknown as Env
 
 function setup(lokiStatus = 204, overrides: Record<string, string | undefined> = {}) {
     const pushed: unknown[] = []
+    const urls: string[] = []
     const deps = {
         fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-            pushed.push(await new Request(input, init).json())
+            const request = new Request(input, init)
+            urls.push(request.url)
+            pushed.push(await request.json())
             return new Response(null, { status: lokiStatus })
         },
         now: () => 1_760_000_000_000,
@@ -20,7 +24,7 @@ function setup(lokiStatus = 204, overrides: Record<string, string | undefined> =
     }
     const send = (path: string, init: RequestInit = {}) =>
         handle(new Request(`https://notify.example${path}`, init), { ...env, ...overrides } as Env, deps)
-    return { pushed, send }
+    return { pushed, urls, send }
 }
 
 const authorized = (body: unknown, token = 'nr_github'): RequestInit => ({
@@ -46,6 +50,18 @@ describe('POST /webhook', () => {
                 ],
             },
         ])
+    })
+
+    it('delivers to several channels of the same type, each with its own settings', async () => {
+        const { urls, send } = setup(204, {
+            CHANNEL_ARCHIVE_TYPE: 'loki',
+            CHANNEL_ARCHIVE_URL: 'https://archive.example/loki/api/v1/push',
+            CHANNEL_ARCHIVE_USER: '654321',
+            CHANNEL_ARCHIVE_TOKEN: 'glc_other',
+        })
+        const response = await send('/webhook?channels=loki,archive', authorized({ title: 'x' }))
+        expect(await response.json()).toEqual({ messages: [{ delivered: ['loki', 'archive'], failed: [] }] })
+        expect(urls.sort()).toEqual(['https://archive.example/loki/api/v1/push', 'https://logs.example/loki/api/v1/push'])
     })
 
     it('is 502 when every channel fails, and says why without secrets', async () => {
@@ -117,8 +133,8 @@ describe('GET /healthz', () => {
     })
 
     // Deploys do not check settings, so this is where a missing one shows up
-    it('is 503 while a channel is missing a secret or a variable', async () => {
-        for (const missing of ['LOKI_TOKEN', 'LOKI_PUSH_URL']) {
+    it('is 503 while a configured channel is missing a parameter', async () => {
+        for (const missing of ['CHANNEL_LOKI_TOKEN', 'CHANNEL_LOKI_URL']) {
             const { send } = setup(204, { [missing]: undefined })
             const response = await send('/healthz')
             expect(response.status).toBe(503)
@@ -126,9 +142,18 @@ describe('GET /healthz', () => {
         }
     })
 
+    it('is 503 while a channel has a type the relay does not know', async () => {
+        const { send } = setup(204, { CHANNEL_PAGER_TYPE: 'pagerduty' })
+        expect((await send('/healthz')).status).toBe(503)
+    })
+
+    it('is 503 with no channel at all', async () => {
+        const { send } = setup(204, { CHANNEL_LOKI_TYPE: undefined })
+        expect((await send('/healthz')).status).toBe(503)
+    })
+
     it('is 503 while no source can authenticate', async () => {
         const { send } = setup(204, { TOKEN_GITHUB: undefined })
-        const response = await send('/healthz')
-        expect(response.status).toBe(503)
+        expect((await send('/healthz')).status).toBe(503)
     })
 })
