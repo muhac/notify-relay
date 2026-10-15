@@ -9,7 +9,8 @@ describe('webhook', () => {
     it('keeps every field of the contract', () => {
         const draft = {
             title: 'HostDown oicna',
-            body: 'no samples for 15m',
+            text: 'no samples for 15m',
+            rich: '<p>no samples for <b>15m</b></p>',
             level: 'high',
             url: 'https://grafana.example/alerting',
             key: 'group-1',
@@ -27,6 +28,7 @@ describe('webhook', () => {
     it('rejects unknown fields, so a misspelling surfaces at the sender', () => {
         expect(() => webhook.parse({ titel: 'x' })).toThrow("unknown field 'titel'")
         expect(() => webhook.parse({ title: 'x', source: 'grafana' })).toThrow("unknown field 'source'")
+        expect(() => webhook.parse({ title: 'x', body: 'old' })).toThrow("unknown field 'body'")
     })
 
     it('requires a one-line title', () => {
@@ -49,7 +51,8 @@ describe('webhook', () => {
     })
 
     it('checks the optional strings', () => {
-        expect(() => webhook.parse({ title: 'x', body: 1 })).toThrow('body must be a string')
+        expect(() => webhook.parse({ title: 'x', text: 1 })).toThrow('text must be a string')
+        expect(() => webhook.parse({ title: 'x', rich: [] })).toThrow('rich must be a string')
         expect(() => webhook.parse({ title: 'x', key: {} })).toThrow('key must be a string')
         expect(() => webhook.parse({ title: 'x', group: false })).toThrow('group must be a string')
     })

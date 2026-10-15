@@ -111,7 +111,7 @@ describe('POST /webhook', () => {
 
     it('refuses bodies over 64 KB', async () => {
         const { pushed, send } = setup()
-        const response = await send('/webhook?channels=loki', authorized({ title: 'x', body: 'a'.repeat(64 * 1024) }))
+        const response = await send('/webhook?channels=loki', authorized({ title: 'x', text: 'a'.repeat(64 * 1024) }))
         expect(response.status).toBe(413)
         expect(pushed).toEqual([])
     })

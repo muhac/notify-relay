@@ -1,7 +1,7 @@
 import { BadRequest } from '../core/http'
 import { LEVELS, type Draft, type Inbound, type Level } from '../core/message'
 
-const FIELDS = new Set(['title', 'body', 'level', 'url', 'key', 'group'])
+const FIELDS = new Set(['title', 'text', 'rich', 'level', 'url', 'key', 'group'])
 
 export const webhook: Inbound = {
     parse(body) {
@@ -14,13 +14,11 @@ export const webhook: Inbound = {
         }
 
         const draft: Draft = { title: title(input.title), level: level(input.level) }
-        const text = optionalString(input, 'body')
-        if (text !== undefined) draft.body = text
+        for (const field of ['text', 'rich', 'key', 'group'] as const) {
+            const value = optionalString(input, field)
+            if (value !== undefined) draft[field] = value
+        }
         if (input.url !== undefined) draft.url = https(input.url)
-        const key = optionalString(input, 'key')
-        if (key !== undefined) draft.key = key
-        const group = optionalString(input, 'group')
-        if (group !== undefined) draft.group = group
         return [draft]
     },
 }
