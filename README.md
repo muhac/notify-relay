@@ -176,12 +176,6 @@ The token stays valid until the grant is revoked, the account's password changes
 months. A dead token fails delivery with `refresh token revoked or expired (invalid_grant)`; `/healthz`
 cannot see it, since the parameters are still set.
 
-With an email-to-SMS address as `TO` (for example a Google Voice one), a `gmail` channel delivers text
-messages, within that gateway's limits. Google Voice, as observed: it drops the subject, keeps only ASCII,
-turns line breaks into spaces and cuts everything after the first blank line. For such a channel, send
-one paragraph of ASCII in `text`, or only a `title`, which then becomes the body; leave out `rich`, since
-what a gateway does with a multipart mail is up to the gateway.
-
 ## Configuration
 
 `wrangler.jsonc` holds nothing deployment-specific. Variables are passed at deploy time and secrets are
