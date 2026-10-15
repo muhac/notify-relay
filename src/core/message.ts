@@ -5,7 +5,8 @@ export type Level = (typeof LEVELS)[number]
 export interface Message {
     source: string
     title: string
-    body?: string
+    text?: string
+    rich?: string
     level: Level
     url?: string
     key?: string

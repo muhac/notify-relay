@@ -8,6 +8,9 @@ There is no queue, no database and no history.
   dead-man's switches) belongs upstream or in a service built for it, e.g. your alerting system.
 - **The sender picks the channels.** They are part of the URL. The relay has no routing rules and no
   default channel.
+- **The sender owns the content.** Channels put each field in its slot and add nothing; the relay never
+  joins, converts or strips text. A sender writing for a constrained channel controls every character
+  that arrives.
 - **Adapters on both sides.** Inbound adapters turn a sender's native payload into one message format;
   outbound adapters turn that message into a channel's API call. The core knows neither.
 - **Not a pager.** If something must wake you up, send it to a paging service directly. A relay outage
@@ -44,11 +47,17 @@ names are the deployment's own (see [Channels](#channels)), not channel types.
 | Field | Required | Meaning |
 |---|---|---|
 | `title` | yes | One line |
-| `body` | no | Plain text; channels that cannot fit it truncate |
+| `text` | no | Plain text |
+| `rich` | no | Formatted text in the channel's own markup: HTML for `gmail`, Markdown where a channel renders it |
 | `level` | no | `low`, `normal` (default), `high` or `critical`. How loudly each channel notifies, never which channels |
 | `url` | no | A link back to the source; https only |
 | `key` | no | On channels that support it, a new message with the same key replaces the previous one |
 | `group` | no | Display grouping |
+
+`title`, `text` and `rich` are the content. A channel that renders markup shows `rich` when it is given,
+the others show `text`; the relay neither checks that the two agree nor derives one from the other. The
+other fields are metadata, used by the channels that have a place for them and ignored by the rest. Each
+channel type below says which fields it uses.
 
 Unknown fields are a 400, so a misspelled field fails at the sender instead of being dropped. Bodies over
 64 KB are a 413.
@@ -129,8 +138,8 @@ CHANNEL_ARCHIVE_TYPE=loki               # a second channel of the same type
 ### `loki`
 
 Pushes each message as one log line to Loki's `/loki/api/v1/push` with basic auth. Labels hold only
-low-cardinality fields (`job="notify-relay"`, `source`, `level`); the rest of the message is the line's
-JSON. Handy as a first channel: a line you can query is a positive signal that delivery works, and it
+low-cardinality fields (`job="notify-relay"`, `source`, `level`); every other field is in the line's
+JSON as sent. Handy as a first channel: a line you can query is a positive signal that delivery works, and it
 doubles as a record of everything sent.
 
 | Parameter | Keep as | Meaning |
@@ -141,10 +150,11 @@ doubles as a record of everything sent.
 
 ### `gmail`
 
-Sends a plain-text email through the Gmail API, as the Google account that granted the refresh token.
-The title is the subject and also the first line of the body, followed by the body and the link:
-email-to-SMS gateways (for example a Google Voice address) drop the subject, so the text stands on its
-own. Each message first exchanges the refresh token for an access token; nothing is cached.
+Sends an email through the Gmail API, as the Google account that granted the refresh token. `title` is
+the subject and `text` the plain-text body, or the title again when there is no `text`. With `rich`, the
+mail is `multipart/alternative` and `rich` is its HTML part; clients that render HTML show it, the rest
+show the plain text. `url`, `key`, `group` and `level` are not used: a link belongs in the content. Each
+message first exchanges the refresh token for an access token; nothing is cached.
 
 | Parameter | Keep as | Meaning |
 |---|---|---|

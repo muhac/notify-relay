@@ -24,22 +24,40 @@ function utf8(base64: string): string {
     return new TextDecoder().decode(Uint8Array.from(binary, (c) => c.charCodeAt(0)))
 }
 
-// Splits the raw RFC 2822 message the relay hands Gmail into headers and the decoded body
-async function sentMail(request: Request) {
-    const { raw } = (await request.json()) as { raw: string }
-    const mime = utf8(raw)
-    const [head, body] = mime.split('\r\n\r\n')
+type Part = { headers: Record<string, string>; content: string }
+
+function part(section: string): Part {
+    const [head, ...rest] = section.split('\r\n\r\n')
     const headers = Object.fromEntries(
         head!.split('\r\n').map((line) => [line.slice(0, line.indexOf(':')).toLowerCase(), line.slice(line.indexOf(':') + 2)]),
     )
-    return { raw, headers, text: utf8(body!) }
+    const content = rest.join('\r\n\r\n')
+    return { headers, content: headers['content-transfer-encoding'] === 'base64' ? utf8(content) : content }
 }
+
+// Decodes the raw RFC 2822 message the relay hands Gmail into its headers and its text parts
+async function sentMail(request: Request) {
+    const { raw } = (await request.json()) as { raw: string }
+    const mail = part(utf8(raw))
+    const boundary = /boundary="([^"]+)"/.exec(mail.headers['content-type'] ?? '')?.[1]
+    const parts = boundary
+        ? mail.content
+              .split(`--${boundary}`)
+              .slice(1, -1)
+              .map((section) => part(section.replace(/^\r\n/, '').replace(/\r\n$/, '')))
+        : [mail]
+    return { raw, headers: mail.headers, parts }
+}
+
+const subject = (header: string) => utf8(header.slice('=?UTF-8?B?'.length, -2))
 
 const message: Message = {
     source: 'ci',
     title: '部署失败 deploy failed',
-    body: 'functions-deploy on main',
+    text: 'functions-deploy failed on main\nsee the run',
     url: 'https://github.com/example/run',
+    key: 'k1',
+    group: 'ci',
     level: 'high',
 }
 
@@ -65,25 +83,49 @@ describe('gmail', () => {
         expect(requests[1]!.headers.get('content-type')).toBe('application/json')
     })
 
-    it('writes a plain-text mail with the title in both subject and body, so email-to-SMS gateways keep it', async () => {
+    it('maps title to the subject and text to a plain body, adding nothing', async () => {
         const { requests, ctx } = fake(granted())
         await gmail.send(message, params, ctx)
-        const { raw, headers, text } = await sentMail(requests[1]!)
+        const { raw, headers, parts } = await sentMail(requests[1]!)
 
         expect(raw).toMatch(/^[A-Za-z0-9_-]+$/)
         expect(headers.to).toBe('you@example.com')
         expect(headers.from).toBeUndefined()
-        expect(headers['content-type']).toBe('text/plain; charset=UTF-8')
-        expect(headers['content-transfer-encoding']).toBe('base64')
         expect(headers.subject).toMatch(/^=\?UTF-8\?B\?[A-Za-z0-9+/=]+\?=$/)
-        expect(utf8(headers.subject!.slice('=?UTF-8?B?'.length, -2))).toBe('部署失败 deploy failed')
-        expect(text).toBe('部署失败 deploy failed\n\nfunctions-deploy on main\n\nhttps://github.com/example/run')
+        expect(subject(headers.subject!)).toBe('部署失败 deploy failed')
+        expect(parts).toHaveLength(1)
+        expect(parts[0]!.headers['content-type']).toBe('text/plain; charset=UTF-8')
+        expect(parts[0]!.content).toBe('functions-deploy failed on main\nsee the run')
     })
 
-    it('leaves out the parts a message does not have', async () => {
+    it('falls back to the title when a message has no text, so the body is never empty', async () => {
         const { requests, ctx } = fake(granted())
         await gmail.send({ source: 's', title: 'only a title', level: 'low' }, params, ctx)
-        expect((await sentMail(requests[1]!)).text).toBe('only a title')
+        const { parts } = await sentMail(requests[1]!)
+        expect(parts.map((p) => p.content)).toEqual(['only a title'])
+    })
+
+    it('sends rich as the HTML alternative, beside the plain text', async () => {
+        const { requests, ctx } = fake(granted())
+        await gmail.send({ ...message, rich: '<p>functions-deploy <b>failed</b></p>' }, params, ctx)
+        const { headers, parts } = await sentMail(requests[1]!)
+
+        expect(headers['content-type']).toMatch(/^multipart\/alternative; boundary="[^"]+"$/)
+        expect(parts.map((p) => p.headers['content-type'])).toEqual([
+            'text/plain; charset=UTF-8',
+            'text/html; charset=UTF-8',
+        ])
+        expect(parts.map((p) => p.content)).toEqual([
+            'functions-deploy failed on main\nsee the run',
+            '<p>functions-deploy <b>failed</b></p>',
+        ])
+    })
+
+    it('keeps the title as the plain alternative when only rich is given', async () => {
+        const { requests, ctx } = fake(granted())
+        await gmail.send({ source: 's', title: 'report', rich: '<h1>report</h1>', level: 'low' }, params, ctx)
+        const { parts } = await sentMail(requests[1]!)
+        expect(parts.map((p) => p.content)).toEqual(['report', '<h1>report</h1>'])
     })
 
     it('reports a revoked or expired refresh token clearly and sends nothing', async () => {

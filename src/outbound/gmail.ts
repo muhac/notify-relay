@@ -5,10 +5,12 @@ import type { Message } from '../core/message'
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const SEND_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send'
+// Every part is base64, whose alphabet has no '_', so a fixed boundary can never occur in the content
+const BOUNDARY = '_notify-relay_'
 
 // Sends as the account that granted the refresh token, which only needs gmail.send. Each message mints
-// its own access token: the relay keeps no state. The title also opens the body, since email-to-SMS
-// gateways drop the subject
+// its own access token: the relay keeps no state. Fields map one to one and nothing is added, so a
+// sender writing for an email-to-SMS gateway controls every character that arrives
 export const gmail: Outbound = {
     type: 'gmail',
     params: ['CLIENT_ID', 'CLIENT_SECRET', 'REFRESH_TOKEN', 'TO'],
@@ -42,15 +44,27 @@ export const gmail: Outbound = {
 }
 
 function mime(to: string, message: Message): string {
-    const text = [message.title, message.body, message.url].filter(Boolean).join('\n\n')
+    const headers = [`To: ${to}`, `Subject: =?UTF-8?B?${base64(utf8(message.title))}?=`, 'MIME-Version: 1.0']
+    const plain = part('text/plain', message.text || message.title)
+    if (message.rich === undefined) return [...headers, plain].join('\r\n')
     return [
-        `To: ${to}`,
-        `Subject: =?UTF-8?B?${base64(utf8(message.title))}?=`,
-        'MIME-Version: 1.0',
-        'Content-Type: text/plain; charset=UTF-8',
+        ...headers,
+        `Content-Type: multipart/alternative; boundary="${BOUNDARY}"`,
+        '',
+        `--${BOUNDARY}`,
+        plain,
+        `--${BOUNDARY}`,
+        part('text/html', message.rich),
+        `--${BOUNDARY}--`,
+    ].join('\r\n')
+}
+
+function part(type: string, content: string): string {
+    return [
+        `Content-Type: ${type}; charset=UTF-8`,
         'Content-Transfer-Encoding: base64',
         '',
-        (base64(utf8(text)).match(/.{1,76}/g) ?? []).join('\r\n'),
+        (base64(utf8(content)).match(/.{1,76}/g) ?? []).join('\r\n'),
     ].join('\r\n')
 }
 
