@@ -15,7 +15,7 @@ There is no queue, no database and no history.
 
 ```text
 inbound adapters          message           outbound adapters
-/webhook  ──→  Message  ──→  deliver  ──→  loki
+/webhook  ──→  Message  ──→  deliver  ──→  loki, gmail
 ```
 
 ## API
@@ -138,6 +138,33 @@ doubles as a record of everything sent.
 | `URL` | variable | e.g. `https://logs-prod-000.grafana.net/loki/api/v1/push` |
 | `USER` | variable | Basic auth user (the Loki instance ID on Grafana Cloud) |
 | `TOKEN` | secret | Basic auth password; on Grafana Cloud, an access policy token with `logs:write` only |
+
+### `gmail`
+
+Sends a plain-text email through the Gmail API, as the Google account that granted the refresh token.
+The title is the subject and also the first line of the body, followed by the body and the link:
+email-to-SMS gateways (for example a Google Voice address) drop the subject, so the text stands on its
+own. Each message first exchanges the refresh token for an access token; nothing is cached.
+
+| Parameter | Keep as | Meaning |
+|---|---|---|
+| `CLIENT_ID` | variable | OAuth client of type *Desktop app* |
+| `CLIENT_SECRET` | secret | That client's secret |
+| `REFRESH_TOKEN` | secret | Granted with the `https://www.googleapis.com/auth/gmail.send` scope only |
+| `TO` | variable or secret | The recipient. Fixed per channel, so a sender cannot pick an address |
+
+Getting the refresh token, once:
+
+- Use a dedicated Google account for sending, so a runaway sender hits its daily limit, not yours.
+- In Google Cloud, enable the Gmail API, add `gmail.send` under the OAuth consent screen's data access,
+  and **publish the app to production**: in testing, refresh tokens expire after 7 days. An unverified app
+  works for its owner; the consent screen shows a warning.
+- Run the authorization-code flow with a loopback redirect (`http://127.0.0.1:<port>`), `access_type=offline`
+  and `prompt=consent`, then exchange the code for the refresh token.
+
+The token stays valid until the grant is revoked, the account's password changes, or it goes unused for six
+months. A dead token fails delivery with `refresh token revoked or expired (invalid_grant)`; `/healthz`
+cannot see it, since the parameters are still set.
 
 ## Configuration
 
