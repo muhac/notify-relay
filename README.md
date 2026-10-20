@@ -161,7 +161,14 @@ message first exchanges the refresh token for an access token; nothing is cached
 | `CLIENT_ID` | variable | OAuth client of type *Desktop app* |
 | `CLIENT_SECRET` | secret | That client's secret |
 | `REFRESH_TOKEN` | secret | Granted with the `https://www.googleapis.com/auth/gmail.send` scope only |
-| `TO` | variable or secret | The recipient. Fixed per channel, so a sender cannot pick an address |
+| `TO` | variable or secret | The recipients. Fixed per channel, so a sender cannot pick an address |
+| `FROM` | variable, optional | The sender's name, as `Name <address>`. Without it, Gmail uses the account's own name |
+
+`TO` is one address or several separated by commas, and `FROM` exactly one; each is `address` or
+`Name <address>`, and a name holding a comma goes in double quotes (`"Doe, Jane" <jane@example.com>`).
+Names in any script arrive as written. The `FROM` address must be the account's own or one of its verified
+*Send mail as* aliases. A malformed value fails delivery with `invalid TO` or `invalid FROM`, without
+quoting it.
 
 Getting the refresh token, once:
 
