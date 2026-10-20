@@ -238,6 +238,15 @@ describe('smtp', () => {
         expect(fake.closes()).toBeGreaterThan(0)
     })
 
+    it('does not connect when the attempt was aborted before it started', async () => {
+        const fake = server()
+        const controller = new AbortController()
+        controller.abort(new DOMException('timeout', 'TimeoutError'))
+        const error = await smtp.send(message, params, fake.ctx(controller.signal)).catch((e: unknown) => e)
+        expect((error as DOMException).name).toBe('TimeoutError')
+        expect(fake.connections).toHaveLength(0)
+    })
+
     it.each([
         ['TO', 'not an address'],
         ['FROM', 'a@example.com, b@example.com'],

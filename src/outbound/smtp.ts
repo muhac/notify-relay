@@ -19,6 +19,7 @@ export const smtp: Outbound = {
         const login = base64(utf8(`\0${param(params, 'USER')}\0${param(params, 'PASSWORD')}`))
 
         const implicit = port === 465
+        signal.throwIfAborted()
         let socket = connect(
             { hostname: param(params, 'HOST'), port },
             { secureTransport: implicit ? 'on' : 'starttls', allowHalfOpen: false },
