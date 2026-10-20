@@ -35,6 +35,9 @@ function setup(spec: Record<string, Behaviour[]>, extra: Channel[] = []) {
     const deps = {
         channels,
         fetch: async () => new Response(null),
+        connect: (): Socket => {
+            throw new Error('fake channels do not connect')
+        },
         now: () => 0,
         sleep: async (ms: number) => void sleeps.push(ms),
         timeoutMs: 20,

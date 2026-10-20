@@ -19,6 +19,9 @@ function setup(lokiStatus = 204, overrides: Record<string, string | undefined> =
             pushed.push(await request.json())
             return new Response(null, { status: lokiStatus })
         },
+        connect: (): Socket => {
+            throw new Error('loki does not connect')
+        },
         now: () => 1_760_000_000_000,
         sleep: async () => {},
     }

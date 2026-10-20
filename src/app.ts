@@ -1,6 +1,6 @@
 import { authenticate, hasSources } from './core/auth'
 import { type Channel, resolveChannels } from './core/channels'
-import { deliver, type Outcome } from './core/deliver'
+import { deliver, type Outcome, type SendContext } from './core/deliver'
 import { BadRequest } from './core/http'
 import type { Inbound } from './core/message'
 import { parseChannels } from './core/query'
@@ -9,6 +9,7 @@ import { adapters } from './outbound'
 
 export interface AppDeps {
     fetch: typeof fetch
+    connect: SendContext['connect']
     now: () => number
     sleep: (ms: number) => Promise<void>
 }

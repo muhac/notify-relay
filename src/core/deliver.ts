@@ -4,6 +4,7 @@ import type { Message } from './message'
 
 export interface SendContext {
     fetch: typeof fetch
+    connect: (address: SocketAddress, options: SocketOptions) => Socket
     now: () => number
     signal: AbortSignal
 }
@@ -21,6 +22,7 @@ export interface Outbound {
 export interface Deps {
     channels: Map<string, Channel>
     fetch: typeof fetch
+    connect: SendContext['connect']
     now: () => number
     sleep: (ms: number) => Promise<void>
     timeoutMs?: number
@@ -70,7 +72,7 @@ async function attempt(message: Message, name: string, deps: Deps): Promise<stri
     for (let retried = false; ; retried = true) {
         try {
             await withTimeout(
-                (signal) => adapter.send(message, params, { fetch: deps.fetch, now: deps.now, signal }),
+                (signal) => adapter.send(message, params, { fetch: deps.fetch, connect: deps.connect, now: deps.now, signal }),
                 deps.timeoutMs ?? TIMEOUT_MS,
             )
             return undefined

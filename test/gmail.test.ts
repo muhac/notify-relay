@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { RateLimited } from '../src/core/http'
 import type { Message } from '../src/core/message'
 import { gmail } from '../src/outbound/gmail'
+import { decode, parseMail, utf8 } from './mail'
 
 const params = { CLIENT_ID: 'client.apps.example', CLIENT_SECRET: 'csecret', REFRESH_TOKEN: 'rtoken', TO: 'you@example.com' }
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
@@ -14,45 +15,19 @@ function fake(token: Response, sent: Response = Response.json({ id: 'm1' })) {
         requests.push(request)
         return request.url === TOKEN_URL ? token.clone() : sent.clone()
     }
-    return { requests, ctx: { fetch, now: () => 0, signal: new AbortController().signal } }
+    const connect = (): Socket => {
+        throw new Error('gmail does not connect')
+    }
+    return { requests, ctx: { fetch, connect, now: () => 0, signal: new AbortController().signal } }
 }
 
 const granted = () => Response.json({ access_token: 'ya29.access', expires_in: 3599, token_type: 'Bearer' })
 
-function utf8(base64: string): string {
-    const binary = atob(base64.replaceAll('-', '+').replaceAll('_', '/').replace(/\s+/g, ''))
-    return new TextDecoder().decode(Uint8Array.from(binary, (c) => c.charCodeAt(0)))
-}
-
-type Part = { headers: Record<string, string>; content: string }
-
-function part(section: string): Part {
-    const [head, ...rest] = section.split('\r\n\r\n')
-    const headers = Object.fromEntries(
-        head!.replace(/\r\n(?=[ \t])/g, '').split('\r\n').map((line) => [line.slice(0, line.indexOf(':')).toLowerCase(), line.slice(line.indexOf(':') + 2)]),
-    )
-    const content = rest.join('\r\n\r\n')
-    return { headers, content: headers['content-transfer-encoding'] === 'base64' ? utf8(content) : content }
-}
-
 // Decodes the raw RFC 2822 message the relay hands Gmail into its headers and its text parts
 async function sentMail(request: Request) {
     const { raw } = (await request.json()) as { raw: string }
-    const text = utf8(raw)
-    const mail = part(text)
-    const boundary = /boundary="([^"]+)"/.exec(mail.headers['content-type'] ?? '')?.[1]
-    const parts = boundary
-        ? mail.content
-              .split(`--${boundary}`)
-              .slice(1, -1)
-              .map((section) => part(section.replace(/^\r\n/, '').replace(/\r\n$/, '')))
-        : [mail]
-    return { raw, lines: text.slice(0, text.indexOf('\r\n\r\n')).split('\r\n'), headers: mail.headers, parts }
+    return { raw, ...parseMail(utf8(raw)) }
 }
-
-// Decodes each encoded-word on its own and drops the whitespace between adjacent ones, as RFC 2047 says
-const decode = (header: string) =>
-    header.replace(/\?=\s+=\?/g, '?==?').replace(/=\?UTF-8\?B\?([A-Za-z0-9+/=]*)\?=/g, (_, word: string) => utf8(word))
 
 const message: Message = {
     source: 'ci',
@@ -182,6 +157,10 @@ describe('gmail', () => {
         ['FROM', 'Relay\r\nBcc: spy@example.com <relay@example.com>'],
         ['FROM', 'Relay <relay@example.com'],
         ['FROM', 'a@example.com, b@example.com'],
+        ['TO', 'you@typo@example.com'],
+        ['TO', 'Ops <ops@typo@example.com>'],
+        ['TO', 'ops@例え.jp'],
+        ['FROM', 'Relay <中继@example.com>'],
     ])('rejects a malformed %s before minting a token, without echoing it', async (param, value) => {
         const { requests, ctx } = fake(granted())
         const error = await gmail.send(message, { ...params, [param]: value }, ctx).catch((e: unknown) => e)
