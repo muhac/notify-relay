@@ -5,8 +5,11 @@ const BOUNDARY = '_notify-relay_'
 // RFC 2047 holds a line with encoded-words to 76 characters. Each word gets a line of its own, and 39 bytes
 // of UTF-8 make a 64-character word, which fits after the longest prefix, 'Subject: '
 const WORD_BYTES = 39
-const ADDRESS = /^[^\s<>",]+@[^\s<>",@]+$/
-const MAILBOX = /^(.*?)\s*<([^\s<>",]+@[^\s<>",@]+)>$/
+// One '@' between runs of printable ASCII that hold nothing delimiting a mailbox. An SMTP envelope without
+// SMTPUTF8 carries ASCII only, so an internationalised domain goes in its xn-- form
+const PART = String.raw`(?:(?![<>",@])[!-~])+`
+const ADDRESS = new RegExp(`^${PART}@${PART}$`)
+const MAILBOX = new RegExp(String.raw`^(.*?)\s*<(${PART}@${PART})>$`)
 
 export interface Addressing {
     headers: string[]

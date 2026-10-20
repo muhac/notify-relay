@@ -157,6 +157,10 @@ describe('gmail', () => {
         ['FROM', 'Relay\r\nBcc: spy@example.com <relay@example.com>'],
         ['FROM', 'Relay <relay@example.com'],
         ['FROM', 'a@example.com, b@example.com'],
+        ['TO', 'you@typo@example.com'],
+        ['TO', 'Ops <ops@typo@example.com>'],
+        ['TO', 'ops@例え.jp'],
+        ['FROM', 'Relay <中继@example.com>'],
     ])('rejects a malformed %s before minting a token, without echoing it', async (param, value) => {
         const { requests, ctx } = fake(granted())
         const error = await gmail.send(message, { ...params, [param]: value }, ctx).catch((e: unknown) => e)

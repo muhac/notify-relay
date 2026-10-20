@@ -27,10 +27,10 @@ export const smtp: Outbound = {
         signal.addEventListener('abort', close, { once: true })
         try {
             let session = new Session(socket)
-            await session.step(undefined, 'greeting')
+            await session.step(undefined, 'greeting', [220])
             if (!implicit) {
                 await session.step(`EHLO ${domain}`, 'EHLO')
-                await session.step('STARTTLS', 'STARTTLS')
+                await session.step('STARTTLS', 'STARTTLS', [220])
                 // A new session drops whatever arrived in plaintext after the 220, so nothing injected before
                 // the handshake is read as a reply
                 session.release()
@@ -38,10 +38,10 @@ export const smtp: Outbound = {
                 session = new Session(socket)
             }
             await session.step(`EHLO ${domain}`, 'EHLO')
-            await session.step(`AUTH PLAIN ${login}`, 'AUTH')
+            await session.step(`AUTH PLAIN ${login}`, 'AUTH', [235])
             await session.step(`MAIL FROM:<${from}>`, 'MAIL FROM')
-            for (const address of to) await session.step(`RCPT TO:<${address}>`, 'RCPT TO')
-            await session.step('DATA', 'DATA', 3)
+            for (const address of to) await session.step(`RCPT TO:<${address}>`, 'RCPT TO', [250, 251])
+            await session.step('DATA', 'DATA', [354])
             // Every line is a header, a boundary or base64, and none of them can start with '.', so the data
             // needs no dot-stuffing
             await session.step(`${data}\r\n.`, 'DATA')
@@ -66,12 +66,12 @@ class Session {
         this.writer = socket.writable.getWriter()
     }
 
-    // Sends a line, if any, and fails unless the reply's code is in the expected class. The error names the
-    // step and the code, never the server's text, which can quote an address
-    async step(line: string | undefined, step: string, expected = 2): Promise<void> {
+    // Sends a line, if any, and fails unless the reply is a code the SMTP RFCs define as success for that
+    // step. The error names the step and the code, never the server's text, which can quote an address
+    async step(line: string | undefined, step: string, accepted = [250]): Promise<void> {
         if (line !== undefined) await this.send(line)
         const code = await this.reply()
-        if (Math.floor(code / 100) !== expected) throw new Error(`SMTP ${code} on ${step}`)
+        if (!accepted.includes(code)) throw new Error(`SMTP ${code} on ${step}`)
     }
 
     async send(line: string): Promise<void> {

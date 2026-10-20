@@ -205,6 +205,24 @@ describe('smtp', () => {
         expect(await failure(smtp.send(message, params, fake.ctx()))).toBe('SMTP 550 on RCPT TO')
     })
 
+    it.each([
+        ['greeting', { greeting: '250 not a greeting' }, 'SMTP 250 on greeting'],
+        ['STARTTLS', { STARTTLS: '250 ok' }, 'SMTP 250 on STARTTLS'],
+        ['AUTH', { AUTH: '250 ok' }, 'SMTP 250 on AUTH'],
+        ['MAIL FROM', { MAIL: '251 ok' }, 'SMTP 251 on MAIL FROM'],
+        ['DATA', { DATA: '350 go ahead' }, 'SMTP 350 on DATA'],
+        ['the message', { DATA_END: '251 queued' }, 'SMTP 251 on DATA'],
+    ])('accepts only the reply %s defines, not any code of the same class', async (_, overrides, error) => {
+        const fake = server(overrides)
+        expect(await failure(smtp.send(message, params, fake.ctx()))).toBe(error)
+    })
+
+    it('accepts 251 for a recipient the server will forward', async () => {
+        const fake = server({ RCPT: '251 user not local; will forward' })
+        await smtp.send(message, params, fake.ctx())
+        expect(fake.sent.at(-1)!.line).toBe('QUIT')
+    })
+
     it('fails when the server hangs up before accepting the mail', async () => {
         const fake = server({ DATA_END: null })
         expect(await failure(smtp.send(message, params, fake.ctx()))).toBe('SMTP connection closed')
@@ -223,6 +241,8 @@ describe('smtp', () => {
     it.each([
         ['TO', 'not an address'],
         ['FROM', 'a@example.com, b@example.com'],
+        ['TO', 'you@typo@example.com'],
+        ['TO', 'ops@例え.jp'],
         ['PORT', 'smtp'],
         ['PORT', '70000'],
     ])('rejects a malformed %s before connecting', async (param, value) => {

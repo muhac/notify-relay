@@ -172,9 +172,10 @@ refuses `STARTTLS` fails the delivery.
 
 `TO` is one address or several separated by commas, and `FROM` exactly one; each is `address` or
 `Name <address>`, and a name holding a comma goes in double quotes (`"Doe, Jane" <jane@example.com>`).
-Names in any script arrive as written. A malformed value fails delivery with `invalid TO` or
-`invalid FROM`, without quoting it. A rejected step fails delivery with its reply code and the step's
-name, e.g. `SMTP 535 on AUTH`, without the server's text, which can quote an address.
+Names in any script arrive as written; addresses are ASCII, so an internationalised domain goes in its
+`xn--` form. A malformed value fails delivery with `invalid TO` or `invalid FROM`, without quoting it. A
+rejected step fails delivery with its reply code and the step's name, e.g. `SMTP 535 on AUTH`, without
+the server's text, which can quote an address.
 
 With a mailbox provider, send from an account of its own: an app password usually opens the whole
 mailbox over IMAP too, not only sending.
