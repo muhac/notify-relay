@@ -18,7 +18,7 @@ There is no queue, no database and no history.
 
 ```text
 inbound adapters          message           outbound adapters
-/webhook  ──→  Message  ──→  deliver  ──→  loki, gmail, smtp
+/webhook  ──→  Message  ──→  deliver  ──→  loki, smtp, gmail
 ```
 
 ## API
@@ -48,7 +48,7 @@ names are the deployment's own (see [Channels](#channels)), not channel types.
 |---|---|---|
 | `title` | yes | One line |
 | `text` | no | Plain text |
-| `rich` | no | Formatted text in the channel's own markup: HTML for `gmail` and `smtp`, Markdown where a channel renders it |
+| `rich` | no | Formatted text in the channel's own markup: HTML for `smtp` and `gmail`, Markdown where a channel renders it |
 | `level` | no | `low`, `normal` (default), `high` or `critical`. How loudly each channel notifies, never which channels |
 | `url` | no | A link back to the source; https only |
 | `key` | no | On channels that support it, a new message with the same key replaces the previous one |
@@ -148,12 +148,40 @@ doubles as a record of everything sent.
 | `USER` | variable | Basic auth user (the Loki instance ID on Grafana Cloud) |
 | `TOKEN` | secret | Basic auth password; on Grafana Cloud, an access policy token with `logs:write` only |
 
+### `smtp`
+
+Submits an email to an SMTP server: a mailbox provider's or a sending service's submission endpoint.
+`title` is the subject and `text` the plain-text body, or the title again when there is no `text`. With
+`rich`, the mail is `multipart/alternative` and `rich` is its HTML part; clients that render HTML show it,
+the rest show the plain text. `url`, `key`, `group` and `level` are not used: a link belongs in the
+content. The relay adds the `Date` and `Message-ID` headers.
+
+Each message opens its own connection and runs `EHLO`, `STARTTLS`, `EHLO`, `AUTH PLAIN`, `MAIL FROM`, one
+`RCPT TO` per address, `DATA` and `QUIT`. Credentials never cross an unencrypted connection: a server that
+refuses `STARTTLS` fails the delivery.
+
+| Parameter | Keep as | Meaning |
+|---|---|---|
+| `HOST` | variable | The submission server, e.g. `smtp.example.com` |
+| `PORT` | variable, optional | Defaults to 587. Workers cannot connect to port 25, and port 465's implicit TLS is not supported |
+| `USER` | variable or secret | The SMTP user name |
+| `PASSWORD` | secret | Its password |
+| `FROM` | variable | The sender; the server must let `USER` send as it |
+| `TO` | variable or secret | The recipients. Fixed per channel, so a sender cannot pick an address |
+
+`TO` is one address or several separated by commas, and `FROM` exactly one; each is `address` or
+`Name <address>`, and a name holding a comma goes in double quotes (`"Doe, Jane" <jane@example.com>`).
+Names in any script arrive as written. A malformed value fails delivery with `invalid TO` or
+`invalid FROM`, without quoting it. A rejected step fails delivery with its reply code and the step's
+name, e.g. `SMTP 535 on AUTH`, without the server's text, which can quote an address.
+
+With a mailbox provider, send from an account of its own: an app password usually opens the whole
+mailbox over IMAP too, not only sending.
+
 ### `gmail`
 
-Sends an email through the Gmail API, as the Google account that granted the refresh token. `title` is
-the subject and `text` the plain-text body, or the title again when there is no `text`. With `rich`, the
-mail is `multipart/alternative` and `rich` is its HTML part; clients that render HTML show it, the rest
-show the plain text. `url`, `key`, `group` and `level` are not used: a link belongs in the content. Each
+Sends an email through the Gmail API, as the Google account that granted the refresh token. The mail is
+the one `smtp` sends, with the fields used the same way; Gmail adds `Date` and `Message-ID` itself. Each
 message first exchanges the refresh token for an access token; nothing is cached.
 
 | Parameter | Keep as | Meaning |
@@ -164,11 +192,8 @@ message first exchanges the refresh token for an access token; nothing is cached
 | `TO` | variable or secret | The recipients. Fixed per channel, so a sender cannot pick an address |
 | `FROM` | variable, optional | The sender's name, as `Name <address>`. Without it, Gmail uses the account's own name |
 
-`TO` is one address or several separated by commas, and `FROM` exactly one; each is `address` or
-`Name <address>`, and a name holding a comma goes in double quotes (`"Doe, Jane" <jane@example.com>`).
-Names in any script arrive as written. The `FROM` address must be the account's own or one of its verified
-*Send mail as* aliases. A malformed value fails delivery with `invalid TO` or `invalid FROM`, without
-quoting it.
+`TO` and `FROM` are written as for `smtp`. The `FROM` address must be the account's own or one of its
+verified *Send mail as* aliases.
 
 Getting the refresh token, once:
 
@@ -182,29 +207,6 @@ Getting the refresh token, once:
 The token stays valid until the grant is revoked, the account's password changes, or it goes unused for six
 months. A dead token fails delivery with `refresh token revoked or expired (invalid_grant)`; `/healthz`
 cannot see it, since the parameters are still set.
-
-### `smtp`
-
-Submits an email to an SMTP server: a mailbox provider's or a sending service's submission endpoint. The
-mail is the one `gmail` sends, fields used the same way, plus the `Date` and `Message-ID` headers Gmail
-would have added. Each message opens its own connection and runs `EHLO`, `STARTTLS`, `EHLO`, `AUTH PLAIN`,
-`MAIL FROM`, one `RCPT TO` per address, `DATA` and `QUIT`. Credentials never cross an unencrypted
-connection: a server that refuses `STARTTLS` fails the delivery.
-
-| Parameter | Keep as | Meaning |
-|---|---|---|
-| `HOST` | variable | The submission server, e.g. `smtp.example.com` |
-| `PORT` | variable, optional | Defaults to 587. Workers cannot connect to port 25, and port 465's implicit TLS is not supported |
-| `USER` | variable or secret | The SMTP user name |
-| `PASSWORD` | secret | Its password |
-| `FROM` | variable | The sender, `address` or `Name <address>`; the server must let `USER` send as it |
-| `TO` | variable or secret | The recipients |
-
-`TO` and `FROM` are written as for `gmail`. A rejected step fails delivery with its reply code and the
-step's name, e.g. `SMTP 535 on AUTH`, without the server's text, which can quote an address.
-
-With a mailbox provider, send from an account of its own: an app password usually opens the whole
-mailbox over IMAP too, not only sending.
 
 ## Configuration
 
