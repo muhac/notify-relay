@@ -29,7 +29,7 @@ type Part = { headers: Record<string, string>; content: string }
 function part(section: string): Part {
     const [head, ...rest] = section.split('\r\n\r\n')
     const headers = Object.fromEntries(
-        head!.split('\r\n').map((line) => [line.slice(0, line.indexOf(':')).toLowerCase(), line.slice(line.indexOf(':') + 2)]),
+        head!.replace(/\r\n(?=[ \t])/g, '').split('\r\n').map((line) => [line.slice(0, line.indexOf(':')).toLowerCase(), line.slice(line.indexOf(':') + 2)]),
     )
     const content = rest.join('\r\n\r\n')
     return { headers, content: headers['content-transfer-encoding'] === 'base64' ? utf8(content) : content }
@@ -38,7 +38,8 @@ function part(section: string): Part {
 // Decodes the raw RFC 2822 message the relay hands Gmail into its headers and its text parts
 async function sentMail(request: Request) {
     const { raw } = (await request.json()) as { raw: string }
-    const mail = part(utf8(raw))
+    const text = utf8(raw)
+    const mail = part(text)
     const boundary = /boundary="([^"]+)"/.exec(mail.headers['content-type'] ?? '')?.[1]
     const parts = boundary
         ? mail.content
@@ -46,10 +47,12 @@ async function sentMail(request: Request) {
               .slice(1, -1)
               .map((section) => part(section.replace(/^\r\n/, '').replace(/\r\n$/, '')))
         : [mail]
-    return { raw, headers: mail.headers, parts }
+    return { raw, lines: text.slice(0, text.indexOf('\r\n\r\n')).split('\r\n'), headers: mail.headers, parts }
 }
 
-const subject = (header: string) => utf8(header.slice('=?UTF-8?B?'.length, -2))
+// Decodes each encoded-word on its own and drops the whitespace between adjacent ones, as RFC 2047 says
+const decode = (header: string) =>
+    header.replace(/\?=\s+=\?/g, '?==?').replace(/=\?UTF-8\?B\?([A-Za-z0-9+/=]*)\?=/g, (_, word: string) => utf8(word))
 
 const message: Message = {
     source: 'ci',
@@ -65,6 +68,7 @@ describe('gmail', () => {
     it('declares the parameters a channel of this type needs', () => {
         expect(gmail.type).toBe('gmail')
         expect([...gmail.params]).toEqual(['CLIENT_ID', 'CLIENT_SECRET', 'REFRESH_TOKEN', 'TO'])
+        expect([...(gmail.optional ?? [])]).toEqual(['FROM'])
     })
 
     it('mints an access token from the refresh token, then sends as the authorized account', async () => {
@@ -92,7 +96,7 @@ describe('gmail', () => {
         expect(headers.to).toBe('you@example.com')
         expect(headers.from).toBeUndefined()
         expect(headers.subject).toMatch(/^=\?UTF-8\?B\?[A-Za-z0-9+/=]+\?=$/)
-        expect(subject(headers.subject!)).toBe('部署失败 deploy failed')
+        expect(decode(headers.subject!)).toBe('部署失败 deploy failed')
         expect(parts).toHaveLength(1)
         expect(parts[0]!.headers['content-type']).toBe('text/plain; charset=UTF-8')
         expect(parts[0]!.content).toBe('functions-deploy failed on main\nsee the run')
@@ -126,6 +130,63 @@ describe('gmail', () => {
         await gmail.send({ source: 's', title: 'report', rich: '<h1>report</h1>', level: 'low' }, params, ctx)
         const { parts } = await sentMail(requests[1]!)
         expect(parts.map((p) => p.content)).toEqual(['report', '<h1>report</h1>'])
+    })
+
+    it('folds a long title into encoded-words, keeping every header line within 76 characters', async () => {
+        const title = '部署失败 🚀 deploy failed, '.repeat(30)
+        const { requests, ctx } = fake(granted())
+        await gmail.send({ ...message, title }, params, ctx)
+        const { lines, headers } = await sentMail(requests[1]!)
+
+        expect(headers.subject!.split(' ').length).toBeGreaterThan(1)
+        expect(decode(headers.subject!)).toBe(title)
+        for (const line of lines) expect(line.length).toBeLessThanOrEqual(76)
+    })
+
+    it('sends from FROM, keeping its display name', async () => {
+        const { requests, ctx } = fake(granted())
+        await gmail.send(message, { ...params, FROM: 'Home Relay <relay@example.com>' }, ctx)
+        const { headers } = await sentMail(requests[1]!)
+        expect(headers.from).toBe('"Home Relay" <relay@example.com>')
+    })
+
+    it('writes every address of TO, quoting ASCII names and encoding the others', async () => {
+        const TO = 'you@example.com, Ops <ops@example.com>, "Doe, Jane" <jane@example.com>, "say \\"hi\\"" <hi@example.com>, 运维值班 <oncall@example.com>, <bare@example.com>'
+        const { requests, ctx } = fake(granted())
+        await gmail.send(message, { ...params, TO }, ctx)
+        const { lines, headers } = await sentMail(requests[1]!)
+
+        expect(headers.to).toMatch(/, =\?UTF-8\?B\?[A-Za-z0-9+/=]+\?= <oncall@example\.com>, /)
+        expect(decode(headers.to!)).toBe(
+            'you@example.com, "Ops" <ops@example.com>, "Doe, Jane" <jane@example.com>, "say \\"hi\\"" <hi@example.com>, 运维值班 <oncall@example.com>, bare@example.com',
+        )
+        for (const line of lines) expect(line.length).toBeLessThanOrEqual(76)
+    })
+
+    it('splits a long encoded name across lines', async () => {
+        const name = '家庭实验室的通知机器人'.repeat(4)
+        const { requests, ctx } = fake(granted())
+        await gmail.send(message, { ...params, FROM: `${name} <relay@example.com>` }, ctx)
+        const { lines, headers } = await sentMail(requests[1]!)
+
+        expect(decode(headers.from!)).toBe(`${name} <relay@example.com>`)
+        for (const line of lines) expect(line.length).toBeLessThanOrEqual(76)
+    })
+
+    it.each([
+        ['TO', 'not an address'],
+        ['TO', 'you@example.com\r\nBcc: spy@example.com'],
+        ['TO', 'Doe, Jane <jane@example.com>'],
+        ['TO', 'you@example.com,'],
+        ['TO', 'Jane "JD" Doe <jane@example.com>'],
+        ['FROM', 'Relay\r\nBcc: spy@example.com <relay@example.com>'],
+        ['FROM', 'Relay <relay@example.com'],
+        ['FROM', 'a@example.com, b@example.com'],
+    ])('rejects a malformed %s before minting a token, without echoing it', async (param, value) => {
+        const { requests, ctx } = fake(granted())
+        const error = await gmail.send(message, { ...params, [param]: value }, ctx).catch((e: unknown) => e)
+        expect((error as Error).message).toBe(`invalid ${param}`)
+        expect(requests).toHaveLength(0)
     })
 
     it('reports a revoked or expired refresh token clearly and sends nothing', async () => {

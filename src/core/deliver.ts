@@ -13,6 +13,8 @@ export interface Outbound {
     type: string
     // Read from CHANNEL_<NAME>_<PARAM>; deploys do not check them, /healthz reports any missing
     params: readonly string[]
+    // Read the same way when set, never reported missing
+    optional?: readonly string[]
     send(message: Message, params: Record<string, string>, ctx: SendContext): Promise<void>
 }
 
