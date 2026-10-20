@@ -2,8 +2,9 @@ import { param } from '../core/channels'
 import type { Outbound } from '../core/deliver'
 import { addressing, base64, mime, utf8 } from './mail'
 
-// Submission with STARTTLS and AUTH PLAIN, one connection per message: the relay keeps no state. The
-// message is the one gmail sends, plus the Date and Message-ID that Gmail would have added
+// Submission with AUTH PLAIN, one connection per message: the relay keeps no state. Port 465 is encrypted
+// from the first byte, any other upgrades with STARTTLS. The message is the one gmail sends, plus the Date
+// and Message-ID that Gmail would have added
 export const smtp: Outbound = {
     type: 'smtp',
     params: ['HOST', 'USER', 'PASSWORD', 'FROM', 'TO'],
@@ -17,17 +18,25 @@ export const smtp: Outbound = {
         const data = mime([...headers, `Date: ${date}`, `Message-ID: <${crypto.randomUUID()}@${domain}>`], message)
         const login = base64(utf8(`\0${param(params, 'USER')}\0${param(params, 'PASSWORD')}`))
 
-        let socket = connect({ hostname: param(params, 'HOST'), port }, { secureTransport: 'starttls', allowHalfOpen: false })
+        const implicit = port === 465
+        let socket = connect(
+            { hostname: param(params, 'HOST'), port },
+            { secureTransport: implicit ? 'on' : 'starttls', allowHalfOpen: false },
+        )
         const close = () => void socket.close().catch(() => {})
         signal.addEventListener('abort', close, { once: true })
         try {
             let session = new Session(socket)
             await session.step(undefined, 'greeting')
-            await session.step(`EHLO ${domain}`, 'EHLO')
-            await session.step('STARTTLS', 'STARTTLS')
-            session.release()
-            socket = socket.startTls()
-            session = new Session(socket)
+            if (!implicit) {
+                await session.step(`EHLO ${domain}`, 'EHLO')
+                await session.step('STARTTLS', 'STARTTLS')
+                // A new session drops whatever arrived in plaintext after the 220, so nothing injected before
+                // the handshake is read as a reply
+                session.release()
+                socket = socket.startTls()
+                session = new Session(socket)
+            }
             await session.step(`EHLO ${domain}`, 'EHLO')
             await session.step(`AUTH PLAIN ${login}`, 'AUTH')
             await session.step(`MAIL FROM:<${from}>`, 'MAIL FROM')

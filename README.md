@@ -157,13 +157,14 @@ the rest show the plain text. `url`, `key`, `group` and `level` are not used: a 
 content. The relay adds the `Date` and `Message-ID` headers.
 
 Each message opens its own connection and runs `EHLO`, `STARTTLS`, `EHLO`, `AUTH PLAIN`, `MAIL FROM`, one
-`RCPT TO` per address, `DATA` and `QUIT`. Credentials never cross an unencrypted connection: a server that
+`RCPT TO` per address, `DATA` and `QUIT`; on port 465 the connection is encrypted from the start, so it
+skips the first `EHLO` and `STARTTLS`. Credentials never cross an unencrypted connection: a server that
 refuses `STARTTLS` fails the delivery.
 
 | Parameter | Keep as | Meaning |
 |---|---|---|
 | `HOST` | variable | The submission server, e.g. `smtp.example.com` |
-| `PORT` | variable, optional | Defaults to 587. Workers cannot connect to port 25, and port 465's implicit TLS is not supported |
+| `PORT` | variable, optional | Defaults to 587. 465 means implicit TLS, any other port STARTTLS. Workers cannot connect to port 25 |
 | `USER` | variable or secret | The SMTP user name |
 | `PASSWORD` | secret | Its password |
 | `FROM` | variable | The sender; the server must let `USER` send as it |

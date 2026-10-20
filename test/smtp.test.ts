@@ -47,7 +47,7 @@ function server(overrides: Replies = {}) {
     const encoder = new TextEncoder()
     const decoder = new TextDecoder()
 
-    function socket(tls: boolean): Socket {
+    function socket(tls: boolean, greet: boolean): Socket {
         let reply = (_: string | null) => {}
         let ended = false
         const readable = new ReadableStream<Uint8Array>({
@@ -88,15 +88,15 @@ function server(overrides: Replies = {}) {
                 closes++
                 reply(null)
             },
-            startTls: () => socket(true),
+            startTls: () => socket(true, false),
         }
-        if (!tls) queueMicrotask(() => reply(replies.greeting ?? null))
+        if (greet) queueMicrotask(() => reply(replies.greeting ?? null))
         return self as unknown as Socket
     }
 
     const connect = (address: SocketAddress, options: SocketOptions) => {
         connections.push({ address, options })
-        return socket(false)
+        return socket(options.secureTransport === 'on', true)
     }
     return {
         sent,
@@ -153,6 +153,23 @@ describe('smtp', () => {
         expect(secure[5]).toBe('DATA')
         expect(secure.at(-1)).toBe('QUIT')
         expect(fake.closes()).toBeGreaterThan(0)
+    })
+
+    it('uses implicit TLS on port 465, so every command is encrypted and none is STARTTLS', async () => {
+        const fake = server()
+        await smtp.send(message, { ...params, PORT: '465' }, fake.ctx())
+        expect(fake.connections[0]!.options).toEqual({ secureTransport: 'on', allowHalfOpen: false })
+        expect(fake.sent.every((s) => s.tls)).toBe(true)
+        expect(fake.sent.slice(0, 2).map((s) => s.line)).toEqual([
+            'EHLO example.com',
+            `AUTH PLAIN ${btoa('\0relay@example.com\0app-password')}`,
+        ])
+    })
+
+    it('ignores whatever the server sent in plaintext after agreeing to STARTTLS', async () => {
+        const fake = server({ STARTTLS: '220 ready\r\n535 injected before the handshake' })
+        await smtp.send(message, params, fake.ctx())
+        expect(fake.sent.at(-1)!.line).toBe('QUIT')
     })
 
     it('submits the same message as gmail, with Date and Message-ID added', async () => {
