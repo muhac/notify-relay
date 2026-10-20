@@ -10,7 +10,10 @@ function capture(response: Response) {
         requests.push(new Request(input, init))
         return response
     }
-    return { requests, ctx: { fetch, now: () => 1_760_000_000_123, signal: new AbortController().signal } }
+    const connect = (): Socket => {
+        throw new Error('loki does not connect')
+    }
+    return { requests, ctx: { fetch, connect, now: () => 1_760_000_000_123, signal: new AbortController().signal } }
 }
 
 describe('loki', () => {

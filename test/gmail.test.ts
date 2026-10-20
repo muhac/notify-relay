@@ -15,7 +15,10 @@ function fake(token: Response, sent: Response = Response.json({ id: 'm1' })) {
         requests.push(request)
         return request.url === TOKEN_URL ? token.clone() : sent.clone()
     }
-    return { requests, ctx: { fetch, now: () => 0, signal: new AbortController().signal } }
+    const connect = (): Socket => {
+        throw new Error('gmail does not connect')
+    }
+    return { requests, ctx: { fetch, connect, now: () => 0, signal: new AbortController().signal } }
 }
 
 const granted = () => Response.json({ access_token: 'ya29.access', expires_in: 3599, token_type: 'Bearer' })
