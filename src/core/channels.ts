@@ -22,11 +22,13 @@ export function resolveChannels(env: object, adapters: Record<string, Outbound>)
         const adapter = adapters[type]
         const params: Record<string, string> = {}
         const missing: string[] = []
-        for (const param of adapter?.params ?? []) {
+        const read = (param: string) => {
             const value = values[`CHANNEL_${id}_${param}`]
             if (typeof value === 'string' && value !== '') params[param] = value
-            else missing.push(param)
+            return param in params
         }
+        for (const param of adapter?.params ?? []) if (!read(param)) missing.push(param)
+        for (const param of adapter?.optional ?? []) read(param)
         channels.set(name, adapter ? { name, type, adapter, params, missing } : { name, type, params, missing })
     }
     return channels

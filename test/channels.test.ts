@@ -5,12 +5,19 @@ import { adapters as registered } from '../src/outbound'
 
 describe('registered channel types', () => {
     it('never use TYPE as a parameter, since CHANNEL_<NAME>_TYPE declares the channel', () => {
-        for (const adapter of Object.values(registered)) expect(adapter.params).not.toContain('TYPE')
+        for (const adapter of Object.values(registered)) {
+            expect(adapter.params).not.toContain('TYPE')
+            expect(adapter.optional ?? []).not.toContain('TYPE')
+        }
     })
 })
 
-const fake = (type: string, params: string[]): Outbound => ({ type, params, send: async () => {} })
-const adapters = { loki: fake('loki', ['URL', 'USER', 'TOKEN']), discord: fake('discord', ['WEBHOOK']) }
+const fake = (type: string, params: string[], optional: string[] = []): Outbound => ({ type, params, optional, send: async () => {} })
+const adapters = {
+    loki: fake('loki', ['URL', 'USER', 'TOKEN']),
+    discord: fake('discord', ['WEBHOOK']),
+    mail: fake('mail', ['TO'], ['FROM']),
+}
 
 describe('resolveChannels', () => {
     it('finds each CHANNEL_<NAME>_TYPE and reads its parameters', () => {
@@ -61,6 +68,24 @@ describe('resolveChannels', () => {
             adapters,
         )
         expect(channels.get('loki')!.missing).toEqual(['USER', 'TOKEN'])
+    })
+
+    it('reads an optional parameter when it is set and never lists it as missing', () => {
+        const channels = resolveChannels(
+            {
+                CHANNEL_HOME_TYPE: 'mail',
+                CHANNEL_HOME_TO: 'you@example.com',
+                CHANNEL_HOME_FROM: 'Relay <relay@example.com>',
+                CHANNEL_WORK_TYPE: 'mail',
+                CHANNEL_WORK_TO: 'boss@example.com',
+                CHANNEL_WORK_FROM: '',
+            },
+            adapters,
+        )
+        expect(channels.get('home')!.params).toEqual({ TO: 'you@example.com', FROM: 'Relay <relay@example.com>' })
+        expect(channels.get('home')!.missing).toEqual([])
+        expect(channels.get('work')!.params).toEqual({ TO: 'boss@example.com' })
+        expect(channels.get('work')!.missing).toEqual([])
     })
 
     it('keeps a channel of an unknown type, without an adapter', () => {

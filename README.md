@@ -89,7 +89,7 @@ request; the caller retries.
 ### Health
 
 `GET /healthz` needs no token and calls no channel. It answers 200 when at least one channel is
-configured, every configured channel has a known type and all of that type's parameters, and at least
+configured, every configured channel has a known type and all of that type's required parameters, and at least
 one source token exists; 503 otherwise, without saying what is missing. Channel types nobody configured
 are not checked. Deploys do not check settings (see [Configuration](#configuration)), so point an
 external probe here.
@@ -119,7 +119,7 @@ of Worker bindings:
 
 ```text
 CHANNEL_<NAME>_TYPE     the type, e.g. loki; declares the channel
-CHANNEL_<NAME>_<PARAM>  one per parameter of that type
+CHANNEL_<NAME>_<PARAM>  one per parameter of that type; optional ones may be left out
 ```
 
 The channel's name is `<NAME>` in lowercase with `_` turned into `-`, so `CHANNEL_HOME_LAB_TYPE` declares
@@ -218,7 +218,8 @@ every wrangler release. Outbound adapters get `fetch` passed in, so tests assert
   a path to it in `src/app.ts`.
 - Outbound: implement `Outbound` (`type`, `params`, `send(message, params, ctx)`) and register it in
   `src/outbound/index.ts`. `send` gets the channel's own parameters, never the environment; `params` is
-  what a channel of the type must configure and what `/healthz` checks. `TYPE` is reserved.
+  what a channel of the type must configure and what `/healthz` checks; `optional` lists the ones it may
+  configure, passed when set and never checked. `TYPE` is reserved.
 
 ### Contract
 
