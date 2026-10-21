@@ -53,6 +53,7 @@ names are the deployment's own (see [Channels](#channels)), not channel types.
 | `url` | no | A link back to the source; https only |
 | `key` | no | On channels that support it, a new message with the same key replaces the previous one |
 | `group` | no | Display grouping |
+| `to` | no | The message's own recipients, written like a mail channel's `TO`. Only a mail channel whose `ALLOW_TO` admits each of them uses it; a malformed list is a 400 |
 
 `title`, `text` and `rich` are the content. A channel that renders markup shows `rich` when it is given,
 the others show `text`; the relay neither checks that the two agree nor derives one from the other. The
@@ -154,7 +155,8 @@ Submits an email to an SMTP server: a mailbox provider's or a sending service's 
 `title` is the subject and `text` the plain-text body, or the title again when there is no `text`. With
 `rich`, the mail is `multipart/alternative` and `rich` is its HTML part; clients that render HTML show it,
 the rest show the plain text. `url`, `key`, `group` and `level` are not used: a link belongs in the
-content. The relay adds the `Date` and `Message-ID` headers.
+content. `to` replaces `TO` where `ALLOW_TO` permits it (see below). The relay adds the `Date` and
+`Message-ID` headers.
 
 Each message opens its own connection and runs `EHLO`, `STARTTLS`, `EHLO`, `AUTH PLAIN`, `MAIL FROM`, one
 `RCPT TO` per address, `DATA` and `QUIT`; on port 465 the connection is encrypted from the start, so it
@@ -168,7 +170,8 @@ refuses `STARTTLS` fails the delivery.
 | `USER` | variable or secret | The SMTP user name |
 | `PASSWORD` | secret | Its password |
 | `FROM` | variable | The sender; the server must let `USER` send as it |
-| `TO` | variable or secret | The recipients. Fixed per channel, so a sender cannot pick an address |
+| `TO` | variable or secret | The recipients of a message that names none |
+| `ALLOW_TO` | variable, optional | Which recipients a message may name in `to`. Without it, none |
 
 `TO` is one address or several separated by commas, and `FROM` exactly one; each is `address` or
 `Name <address>`, and a name holding a comma goes in double quotes (`"Doe, Jane" <jane@example.com>`).
@@ -176,6 +179,14 @@ Names in any script arrive as written; addresses are ASCII, so an internationali
 `xn--` form. A malformed value fails delivery with `invalid TO` or `invalid FROM`, without quoting it. A
 rejected step fails delivery with its reply code and the step's name, e.g. `SMTP 535 on AUTH`, without
 the server's text, which can quote an address.
+
+By default a sender cannot pick an address: a message with `to` fails as `custom recipients not enabled`.
+`ALLOW_TO` opens the channel to them. It is a comma-separated list of `*` (anyone), `*@example.com` (that
+domain, not its subdomains) or an address, compared without case. When every address in `to` matches,
+`to` replaces `TO`; otherwise delivery fails as `recipient not allowed`, and the mail is never sent to
+`TO` instead, since that would reach someone it was not meant for. Once a channel allows a recipient, any
+sender token can mail that recipient from the channel's domain, so keep the list as narrow as the senders
+need.
 
 With a mailbox provider, send from an account of its own: an app password usually opens the whole
 mailbox over IMAP too, not only sending.
@@ -191,10 +202,11 @@ message first exchanges the refresh token for an access token; nothing is cached
 | `CLIENT_ID` | variable | OAuth client of type *Desktop app* |
 | `CLIENT_SECRET` | secret | That client's secret |
 | `REFRESH_TOKEN` | secret | Granted with the `https://www.googleapis.com/auth/gmail.send` scope only |
-| `TO` | variable or secret | The recipients. Fixed per channel, so a sender cannot pick an address |
+| `TO` | variable or secret | The recipients of a message that names none |
 | `FROM` | variable, optional | The sender's name, as `Name <address>`. Without it, Gmail uses the account's own name |
+| `ALLOW_TO` | variable, optional | Which recipients a message may name in `to`. Without it, none |
 
-`TO` and `FROM` are written as for `smtp`. The `FROM` address must be the account's own or one of its
+`TO`, `FROM` and `ALLOW_TO` work as for `smtp`. The `FROM` address must be the account's own or one of its
 verified *Send mail as* aliases.
 
 Getting the refresh token, once:

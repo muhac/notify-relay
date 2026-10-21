@@ -11,6 +11,7 @@ export interface Message {
     url?: string
     key?: string
     group?: string
+    to?: string
 }
 
 export type Draft = Omit<Message, 'source'>

@@ -1,3 +1,5 @@
+import { parseAddresses, parseAllowlist } from '../core/address'
+import { param } from '../core/channels'
 import type { Message } from '../core/message'
 
 // Every part is base64, whose alphabet has no '_', so a fixed boundary can never occur in the content
@@ -5,11 +7,6 @@ const BOUNDARY = '_notify-relay_'
 // RFC 2047 holds a line with encoded-words to 76 characters. Each word gets a line of its own, and 39 bytes
 // of UTF-8 make a 64-character word, which fits after the longest prefix, 'Subject: '
 const WORD_BYTES = 39
-// One '@' between runs of printable ASCII that hold nothing delimiting a mailbox. An SMTP envelope without
-// SMTPUTF8 carries ASCII only, so an internationalised domain goes in its xn-- form
-const PART = String.raw`(?:(?![<>",@])[!-~])+`
-const ADDRESS = new RegExp(`^${PART}@${PART}$`)
-const MAILBOX = new RegExp(String.raw`^(.*?)\s*<(${PART}@${PART})>$`)
 
 export interface Addressing {
     headers: string[]
@@ -17,9 +14,21 @@ export interface Addressing {
     to: string[]
 }
 
-// TO is a comma-separated list of 'address' or 'name <address>', with the name optionally quoted, and FROM
-// exactly one. Returns their headers and the bare addresses. The error never holds the value, which may
-// be a secret
+// The message's own recipients when the channel's ALLOW_TO lets every one through, otherwise the channel's
+// TO. A message naming recipients is never sent to TO instead: it would reach someone it was not meant for
+export function recipients(params: Record<string, string>, message: Message): string {
+    const allowed = params.ALLOW_TO === undefined ? undefined : parseAllowlist(params.ALLOW_TO)
+    if (params.ALLOW_TO !== undefined && allowed === undefined) throw new Error('invalid ALLOW_TO')
+    if (message.to === undefined) return param(params, 'TO')
+    if (allowed === undefined) throw new Error('custom recipients not enabled')
+    const mailboxes = parseAddresses(message.to)
+    if (mailboxes === undefined) throw new Error('invalid to')
+    if (!mailboxes.every((mailbox) => allowed(mailbox.address))) throw new Error('recipient not allowed')
+    return message.to
+}
+
+// TO is one address or more and FROM exactly one; returns their headers and the bare addresses. The error
+// never holds the value, which may be a secret
 export function addressing(to: string, from: string | undefined): Addressing {
     const recipients = mailboxes(to, 'TO')
     const sender = from === undefined ? undefined : mailboxes(from, 'FROM')
@@ -66,37 +75,13 @@ function part(type: string, content: string): string {
 }
 
 function mailboxes(value: string, param: string): { header: string; address: string }[] {
-    return split(value).map((item) => {
-        const trimmed = item.trim()
-        if (ADDRESS.test(trimmed)) return { header: trimmed, address: trimmed }
-        const [, raw, address] = MAILBOX.exec(trimmed) ?? []
-        const name = raw === undefined ? undefined : unquote(raw)
-        if (name === undefined || address === undefined) throw new Error(`invalid ${param}`)
+    const parsed = parseAddresses(value)
+    if (parsed === undefined) throw new Error(`invalid ${param}`)
+    return parsed.map(({ name, address }) => {
         if (name === '') return { header: address, address }
         if (/^[\x20-\x7e]*$/.test(name)) return { header: `"${name.replace(/[\\"]/g, '\\$&')}" <${address}>`, address }
         return { header: `${words(name)}\r\n <${address}>`, address }
     })
-}
-
-function split(value: string): string[] {
-    const items: string[] = []
-    let quoted = false
-    let start = 0
-    for (let i = 0; i < value.length; i++) {
-        if (quoted && value[i] === '\\') i++
-        else if (value[i] === '"') quoted = !quoted
-        else if (!quoted && value[i] === ',') {
-            items.push(value.slice(start, i))
-            start = i + 1
-        }
-    }
-    return [...items, value.slice(start)]
-}
-
-function unquote(name: string): string | undefined {
-    const quoted = /^"((?:[^"\\]|\\.)*)"$/.exec(name)?.[1]
-    if (quoted !== undefined) return quoted.replace(/\\(.)/g, '$1')
-    return name.includes('"') ? undefined : name
 }
 
 function words(text: string): string {

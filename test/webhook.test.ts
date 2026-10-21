@@ -15,6 +15,7 @@ describe('webhook', () => {
             url: 'https://grafana.example/alerting',
             key: 'group-1',
             group: 'alerts',
+            to: 'ops@example.com, "Doe, Jane" <jane@example.com>',
         }
         expect(webhook.parse(draft)).toEqual([draft])
     })
@@ -55,5 +56,12 @@ describe('webhook', () => {
         expect(() => webhook.parse({ title: 'x', rich: [] })).toThrow('rich must be a string')
         expect(() => webhook.parse({ title: 'x', key: {} })).toThrow('key must be a string')
         expect(() => webhook.parse({ title: 'x', group: false })).toThrow('group must be a string')
+        expect(() => webhook.parse({ title: 'x', to: ['a@example.com'] })).toThrow('to must be a string')
+    })
+
+    it('rejects recipients that are not email addresses, before any channel sees them', () => {
+        for (const to of ['', 'not an address', 'a@typo@example.com', 'ops@例え.jp', 'a@example.com,', 'Doe, Jane <jane@example.com>']) {
+            expect(() => webhook.parse({ title: 'x', to })).toThrow('to must be one or more email addresses')
+        }
     })
 })

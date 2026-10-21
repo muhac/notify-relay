@@ -1,7 +1,8 @@
+import { parseAddresses } from '../core/address'
 import { BadRequest } from '../core/http'
 import { LEVELS, type Draft, type Inbound, type Level } from '../core/message'
 
-const FIELDS = new Set(['title', 'text', 'rich', 'level', 'url', 'key', 'group'])
+const FIELDS = new Set(['title', 'text', 'rich', 'level', 'url', 'key', 'group', 'to'])
 
 export const webhook: Inbound = {
     parse(body) {
@@ -19,6 +20,8 @@ export const webhook: Inbound = {
             if (value !== undefined) draft[field] = value
         }
         if (input.url !== undefined) draft.url = https(input.url)
+        const to = optionalString(input, 'to')
+        if (to !== undefined) draft.to = addresses(to)
         return [draft]
     },
 }
@@ -41,6 +44,12 @@ function level(value: unknown): Level {
 function https(value: unknown): string {
     if (typeof value === 'string' && URL.canParse(value) && new URL(value).protocol === 'https:') return value
     throw new BadRequest('url must be https')
+}
+
+// Checked here, so a malformed list is the sender's 400 rather than every mail channel's failure
+function addresses(value: string): string {
+    if (parseAddresses(value) === undefined) throw new BadRequest('to must be one or more email addresses')
+    return value
 }
 
 function optionalString(input: Record<string, unknown>, field: string): string | undefined {

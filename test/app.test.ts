@@ -98,6 +98,7 @@ describe('POST /webhook', () => {
             ['/webhook', authorized({ title: 'x' }), 'channels is required'],
             ['/webhook?channels=pager', authorized({ title: 'x' }), "unknown channel 'pager'"],
             ['/webhook?channels=loki', authorized({ titel: 'x' }), "unknown field 'titel'"],
+            ['/webhook?channels=loki', authorized({ title: 'x', to: 'not an address' }), 'to must be one or more email addresses'],
             [
                 '/webhook?channels=loki',
                 { ...authorized(null), body: '{"title":' },
