@@ -15,6 +15,7 @@ describe('webhook', () => {
             url: 'https://grafana.example/alerting',
             key: 'group-1',
             group: 'alerts',
+            to: { mail: 'ops@example.com, "Doe, Jane" <jane@example.com>' },
         }
         expect(webhook.parse(draft)).toEqual([draft])
     })
@@ -55,5 +56,14 @@ describe('webhook', () => {
         expect(() => webhook.parse({ title: 'x', rich: [] })).toThrow('rich must be a string')
         expect(() => webhook.parse({ title: 'x', key: {} })).toThrow('key must be a string')
         expect(() => webhook.parse({ title: 'x', group: false })).toThrow('group must be a string')
+    })
+
+    it('takes to as channel names mapped to recipients, leaving their syntax to each channel', () => {
+        for (const to of ['a@example.com', ['a@example.com'], null, { mail: 1 }, { mail: ['a@example.com'] }]) {
+            expect(() => webhook.parse({ title: 'x', to })).toThrow('to must map channel names to recipients')
+        }
+        expect(webhook.parse({ title: 'x', to: { mail: 'checked by the channel' } })).toEqual([
+            { title: 'x', level: 'normal', to: { mail: 'checked by the channel' } },
+        ])
     })
 })

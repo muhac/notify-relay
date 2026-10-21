@@ -53,6 +53,7 @@ names are the deployment's own (see [Channels](#channels)), not channel types.
 | `url` | no | A link back to the source; https only |
 | `key` | no | On channels that support it, a new message with the same key replaces the previous one |
 | `group` | no | Display grouping |
+| `to` | no | Recipients by channel name, e.g. `{"mail": "ops@example.com"}`, each in that channel type's syntax. A channel not named keeps its own; see [Recipients](#recipients) |
 
 `title`, `text` and `rich` are the content. A channel that renders markup shows `rich` when it is given,
 the others show `text`; the relay neither checks that the two agree nor derives one from the other. The
@@ -61,6 +62,27 @@ channel type below says which fields it uses.
 
 Unknown fields are a 400, so a misspelled field fails at the sender instead of being dropped. Bodies over
 64 KB are a 413.
+
+### Recipients
+
+Each channel delivers to the recipients configured for it (`TO` on mail channels), so by default a sender
+cannot pick an address. A channel whose type takes recipients can be opened with `ALLOW_TO`, listing who a
+message may name; `to` then names them per channel:
+
+```json
+{"title": "invoice paid", "to": {"mail": "Jane <jane@example.com>", "backup": "jane@example.com"}}
+```
+
+The relay checks `to` after authentication and before any delivery, and answers 400 unless every entry
+names a channel in this request's `channels` or `fallback`, of a type that takes recipients, written in its
+syntax and admitted by its `ALLOW_TO`. A channel the message names no recipients for delivers to its own,
+fallback channels included: to reach the same people through a fallback, name them for it too. A channel
+never sends to its own recipients in place of those a message names, which would reach someone the mail
+was not meant for.
+
+Once a channel admits a recipient, any sender token can reach that recipient through it, so keep
+`ALLOW_TO` as narrow as the senders need. The mail types (`smtp`, `gmail`) take recipients; `loki` does
+not.
 
 ### Responses
 
@@ -154,7 +176,8 @@ Submits an email to an SMTP server: a mailbox provider's or a sending service's 
 `title` is the subject and `text` the plain-text body, or the title again when there is no `text`. With
 `rich`, the mail is `multipart/alternative` and `rich` is its HTML part; clients that render HTML show it,
 the rest show the plain text. `url`, `key`, `group` and `level` are not used: a link belongs in the
-content. The relay adds the `Date` and `Message-ID` headers.
+content. Recipients a message names for the channel in `to` replace `TO` where `ALLOW_TO` admits them.
+The relay adds the `Date` and `Message-ID` headers.
 
 Each message opens its own connection and runs `EHLO`, `STARTTLS`, `EHLO`, `AUTH PLAIN`, `MAIL FROM`, one
 `RCPT TO` per address, `DATA` and `QUIT`; on port 465 the connection is encrypted from the start, so it
@@ -168,7 +191,8 @@ refuses `STARTTLS` fails the delivery.
 | `USER` | variable or secret | The SMTP user name |
 | `PASSWORD` | secret | Its password |
 | `FROM` | variable | The sender; the server must let `USER` send as it |
-| `TO` | variable or secret | The recipients. Fixed per channel, so a sender cannot pick an address |
+| `TO` | variable or secret | The recipients of a message that names none |
+| `ALLOW_TO` | variable, optional | Which recipients a message may name in `to`. Without it, none |
 
 `TO` is one address or several separated by commas, and `FROM` exactly one; each is `address` or
 `Name <address>`, and a name holding a comma goes in double quotes (`"Doe, Jane" <jane@example.com>`).
@@ -176,6 +200,12 @@ Names in any script arrive as written; addresses are ASCII, so an internationali
 `xn--` form. A malformed value fails delivery with `invalid TO` or `invalid FROM`, without quoting it. A
 rejected step fails delivery with its reply code and the step's name, e.g. `SMTP 535 on AUTH`, without
 the server's text, which can quote an address.
+
+Recipients in `to` are written like `TO`. `ALLOW_TO` is a comma-separated list of `*` (anyone),
+`*@example.com` (that domain, not its subdomains) or an address, compared without case; without it, a
+message naming recipients for the channel is a 400 (`custom recipients not enabled`), and with it, one
+naming anyone outside the list (`recipient not allowed`). A malformed `ALLOW_TO` fails every delivery on
+the channel as `invalid ALLOW_TO`, since only the operator can fix it.
 
 With a mailbox provider, send from an account of its own: an app password usually opens the whole
 mailbox over IMAP too, not only sending.
@@ -191,10 +221,11 @@ message first exchanges the refresh token for an access token; nothing is cached
 | `CLIENT_ID` | variable | OAuth client of type *Desktop app* |
 | `CLIENT_SECRET` | secret | That client's secret |
 | `REFRESH_TOKEN` | secret | Granted with the `https://www.googleapis.com/auth/gmail.send` scope only |
-| `TO` | variable or secret | The recipients. Fixed per channel, so a sender cannot pick an address |
+| `TO` | variable or secret | The recipients of a message that names none |
 | `FROM` | variable, optional | The sender's name, as `Name <address>`. Without it, Gmail uses the account's own name |
+| `ALLOW_TO` | variable, optional | Which recipients a message may name in `to`. Without it, none |
 
-`TO` and `FROM` are written as for `smtp`. The `FROM` address must be the account's own or one of its
+`TO`, `FROM` and `ALLOW_TO` work as for `smtp`. The `FROM` address must be the account's own or one of its
 verified *Send mail as* aliases.
 
 Getting the refresh token, once:
@@ -253,7 +284,9 @@ fake `fetch` or a scripted fake server receives instead of mocking globals.
 - Outbound: implement `Outbound` (`type`, `params`, `send(message, params, ctx)`) and register it in
   `src/outbound/index.ts`. `send` gets the channel's own parameters, never the environment; `params` is
   what a channel of the type must configure and what `/healthz` checks; `optional` lists the ones it may
-  configure, passed when set and never checked. `TYPE` is reserved.
+  configure, passed when set and never checked. A type whose channels take recipients implements
+  `recipients(value, params)`, returning why it refuses a value from `to` or nothing; `ctx.channel` tells
+  `send` which entry is its own. `TYPE` is reserved.
 
 ### Contract
 

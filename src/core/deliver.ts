@@ -7,6 +7,8 @@ export interface SendContext {
     connect: (address: SocketAddress, options: SocketOptions) => Socket
     now: () => number
     signal: AbortSignal
+    // The channel this send is for, which picks the message's recipients for it from `to`
+    channel: string
 }
 
 // A channel type. Each configured channel of this type hands send() its own parameters
@@ -16,6 +18,9 @@ export interface Outbound {
     params: readonly string[]
     // Read the same way when set, never reported missing
     optional?: readonly string[]
+    // Why the channel refuses recipients a message names for it in `to`, or undefined. Checked before
+    // delivery, so a refusal is the sender's 400; a type without it takes no recipients
+    recipients?: (value: string, params: Record<string, string>) => string | undefined
     send(message: Message, params: Record<string, string>, ctx: SendContext): Promise<void>
 }
 
@@ -72,7 +77,7 @@ async function attempt(message: Message, name: string, deps: Deps): Promise<stri
     for (let retried = false; ; retried = true) {
         try {
             await withTimeout(
-                (signal) => adapter.send(message, params, { fetch: deps.fetch, connect: deps.connect, now: deps.now, signal }),
+                (signal) => adapter.send(message, params, { fetch: deps.fetch, connect: deps.connect, now: deps.now, signal, channel: name }),
                 deps.timeoutMs ?? TIMEOUT_MS,
             )
             return undefined

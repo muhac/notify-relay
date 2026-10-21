@@ -49,6 +49,10 @@ export async function handle(request: Request, env: Env, deps: AppDeps): Promise
         throw error
     }
     if (drafts.length === 0) return new Response(null, { status: 204 })
+    for (const draft of drafts) {
+        const refused = refuseRecipients(draft.to ?? {}, [...routing.channels, ...routing.fallback], channels)
+        if (refused !== undefined) return badRequest(refused)
+    }
 
     const outcomes: Outcome[] = []
     for (const draft of drafts) {
@@ -103,4 +107,18 @@ function badRequest(error: string): Response {
 
 function methodNotAllowed(allow: string): Response {
     return new Response(null, { status: 405, headers: { allow } })
+}
+
+// Recipients are the sender's to get right: named for a channel this request uses, of a type that takes
+// them, written in its syntax and admitted by its ALLOW_TO. Retrying would not change any of that
+function refuseRecipients(to: Record<string, string>, used: string[], channels: Map<string, Channel>): string | undefined {
+    for (const [name, value] of Object.entries(to)) {
+        const channel = channels.get(name)
+        if (!channel || !used.includes(name)) return `to names '${name}', which this request does not send to`
+        const refuse = channel.adapter?.recipients
+        if (!refuse) return `'${name}' does not take recipients`
+        const reason = refuse(value, channel.params)
+        if (reason !== undefined) return `to.${name}: ${reason}`
+    }
+    return undefined
 }

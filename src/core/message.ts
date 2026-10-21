@@ -11,6 +11,8 @@ export interface Message {
     url?: string
     key?: string
     group?: string
+    // Recipients by channel name, each in that channel type's own syntax
+    to?: Record<string, string>
 }
 
 export type Draft = Omit<Message, 'source'>

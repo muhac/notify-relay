@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { handle } from '../src/app'
+import { parseMail, utf8 } from './mail'
 
 const env = {
     CHANNEL_LOKI_TYPE: 'loki',
@@ -124,6 +125,82 @@ describe('POST /webhook', () => {
         const response = await send('/webhook?channels=loki', { method: 'GET' })
         expect(response.status).toBe(405)
         expect(response.headers.get('allow')).toBe('POST')
+    })
+})
+
+describe('recipients a message names in to', () => {
+    const TOKEN_URL = 'https://oauth2.googleapis.com/token'
+    const mail = (name: string, to: string) => ({
+        [`CHANNEL_${name}_TYPE`]: 'gmail',
+        [`CHANNEL_${name}_CLIENT_ID`]: 'client.apps.example',
+        [`CHANNEL_${name}_CLIENT_SECRET`]: 'csecret',
+        [`CHANNEL_${name}_REFRESH_TOKEN`]: 'rtoken',
+        [`CHANNEL_${name}_TO`]: to,
+    })
+
+    // Two gmail channels next to loki; records every request and the To header of each mail sent
+    function setup(extra: Record<string, string> = {}) {
+        const requests: string[] = []
+        const to: string[] = []
+        const deps = {
+            fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+                const request = new Request(input, init)
+                requests.push(request.url)
+                if (request.url === TOKEN_URL) return Response.json({ access_token: 'ya29.access' })
+                if (request.url.startsWith('https://gmail.googleapis.com/')) {
+                    const { raw } = (await request.json()) as { raw: string }
+                    to.push(parseMail(utf8(raw)).headers.to!)
+                    return Response.json({ id: 'm1' })
+                }
+                return new Response(null, { status: 204 })
+            },
+            connect: (): Socket => {
+                throw new Error('gmail does not connect')
+            },
+            now: () => 1_760_000_000_000,
+            sleep: async () => {},
+        }
+        const channels = { ...env, ...mail('MAIL', 'me@example.com'), ...mail('SPARE', 'spare@example.com'), ...extra }
+        const send = (path: string, body: unknown) =>
+            handle(new Request(`https://notify.example${path}`, authorized(body)), channels as unknown as Env, deps)
+        return { requests, to, send }
+    }
+
+    it('sends to the recipients named for a channel whose ALLOW_TO admits them', async () => {
+        const { to, send } = setup({ CHANNEL_MAIL_ALLOW_TO: '*@example.org' })
+        const response = await send('/webhook?channels=mail', { title: 'x', to: { mail: 'team@example.org' } })
+        expect(response.status).toBe(200)
+        expect(to).toEqual(['team@example.org'])
+    })
+
+    it('keeps TO for a channel the message names no recipients for', async () => {
+        const { to, send } = setup({ CHANNEL_MAIL_ALLOW_TO: '*' })
+        const response = await send('/webhook?channels=mail,spare,loki', { title: 'x', to: { mail: 'team@example.org' } })
+        expect(await response.json()).toEqual({ messages: [{ delivered: ['mail', 'spare', 'loki'], failed: [] }] })
+        expect(to.sort()).toEqual(['spare@example.com', 'team@example.org'])
+    })
+
+    it.each([
+        ['a channel this request does not send to', '/webhook?channels=loki', { mail: 'a@example.org' }, {}, "to names 'mail', which this request does not send to"],
+        ['a channel whose type takes no recipients', '/webhook?channels=loki', { loki: 'a@example.org' }, {}, "'loki' does not take recipients"],
+        ['recipients that are not email addresses', '/webhook?channels=mail', { mail: 'a@typo@example.org' }, { CHANNEL_MAIL_ALLOW_TO: '*' }, 'to.mail: must be one or more email addresses'],
+        ['a channel without ALLOW_TO', '/webhook?channels=mail', { mail: 'a@example.org' }, {}, 'to.mail: custom recipients not enabled'],
+        ['a recipient outside ALLOW_TO', '/webhook?channels=mail', { mail: 'a@example.org, spy@example.com' }, { CHANNEL_MAIL_ALLOW_TO: '*@example.org' }, 'to.mail: recipient not allowed'],
+        ['a fallback channel without ALLOW_TO', '/webhook?channels=loki&fallback=mail', { mail: 'a@example.org' }, {}, 'to.mail: custom recipients not enabled'],
+    ])('is a 400 for %s, before any channel is contacted', async (_, path, recipients, extra, error) => {
+        const { requests, send } = setup(extra)
+        const response = await send(path, { title: 'x', to: recipients })
+        expect(response.status).toBe(400)
+        expect(await response.json()).toEqual({ error })
+        expect(requests).toEqual([])
+    })
+
+    it('leaves a malformed ALLOW_TO to delivery, since only the operator can fix it', async () => {
+        const { requests, send } = setup({ CHANNEL_MAIL_ALLOW_TO: 'example.org' })
+        const response = await send('/webhook?channels=mail', { title: 'x', to: { mail: 'a@example.org' } })
+        expect(response.status).toBe(502)
+        expect(await response.json()).toEqual({ messages: [{ delivered: [], failed: [{ channel: 'mail', error: 'invalid ALLOW_TO' }] }] })
+        expect(requests).toEqual([])
     })
 })
 

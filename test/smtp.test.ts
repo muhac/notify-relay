@@ -109,6 +109,7 @@ function server(overrides: Replies = {}) {
             connect,
             now: () => NOW,
             signal,
+            channel: 'mail',
         }),
     }
 }
@@ -119,7 +120,7 @@ describe('smtp', () => {
     it('declares the parameters a channel of this type needs', () => {
         expect(smtp.type).toBe('smtp')
         expect([...smtp.params]).toEqual(['HOST', 'USER', 'PASSWORD', 'FROM', 'TO'])
-        expect([...(smtp.optional ?? [])]).toEqual(['PORT'])
+        expect([...(smtp.optional ?? [])]).toEqual(['PORT', 'ALLOW_TO'])
     })
 
     it('connects to HOST on 587 by default, ready to upgrade to TLS', async () => {
@@ -236,6 +237,47 @@ describe('smtp', () => {
         controller.abort(new DOMException('timeout', 'TimeoutError'))
         expect(await sending).toBe('SMTP connection closed')
         expect(fake.closes()).toBeGreaterThan(0)
+    })
+
+    it('sends to the message\'s own recipients when ALLOW_TO lets every one of them through', async () => {
+        const fake = server()
+        const to = 'Boss <Boss@Example.NET>, team@example.org'
+        await smtp.send({ ...message, to: { mail: to } }, { ...params, ALLOW_TO: '*@example.org, boss@example.net' }, fake.ctx())
+        const rcpt = fake.sent.filter((s) => s.line.startsWith('RCPT')).map((s) => s.line)
+        expect(rcpt).toEqual(['RCPT TO:<Boss@Example.NET>', 'RCPT TO:<team@example.org>'])
+        const data = fake.sent.find((s, i) => fake.sent[i - 1]?.line === 'DATA')!.line
+        expect(parseMail(data).headers.to).toBe('"Boss" <Boss@Example.NET>, team@example.org')
+    })
+
+    it('lets any recipient through with ALLOW_TO=*', async () => {
+        const fake = server()
+        await smtp.send({ ...message, to: { mail: 'anyone@anywhere.example' } }, { ...params, ALLOW_TO: '*' }, fake.ctx())
+        expect(fake.sent.filter((s) => s.line.startsWith('RCPT')).map((s) => s.line)).toEqual(['RCPT TO:<anyone@anywhere.example>'])
+    })
+
+    it('keeps TO when the message names recipients only for other channels', async () => {
+        const fake = server()
+        await smtp.send({ ...message, to: { other: 'team@example.org' } }, { ...params, ALLOW_TO: '*' }, fake.ctx())
+        expect(fake.sent.filter((s) => s.line.startsWith('RCPT')).map((s) => s.line)).toEqual([
+            'RCPT TO:<you@example.com>',
+            'RCPT TO:<ops@example.com>',
+        ])
+    })
+
+    it.each([
+        ['a channel without ALLOW_TO', {}, 'you@example.com', 'custom recipients not enabled'],
+        ['a recipient outside ALLOW_TO', { ALLOW_TO: '*@example.org' }, 'team@example.org, spy@example.com', 'recipient not allowed'],
+        ['a subdomain of an allowed domain', { ALLOW_TO: '*@example.org' }, 'team@mail.example.org', 'recipient not allowed'],
+        ['a malformed ALLOW_TO', { ALLOW_TO: 'example.org' }, 'team@example.org', 'invalid ALLOW_TO'],
+    ])('refuses %s before connecting, never falling back to TO', async (_, extra, to, error) => {
+        const fake = server()
+        expect(await failure(smtp.send({ ...message, to: { mail: to } }, { ...params, ...extra }, fake.ctx()))).toBe(error)
+        expect(fake.connections).toHaveLength(0)
+    })
+
+    it('reports a malformed ALLOW_TO even when a message has no recipients of its own', async () => {
+        const fake = server()
+        expect(await failure(smtp.send(message, { ...params, ALLOW_TO: '*@example.org,' }, fake.ctx()))).toBe('invalid ALLOW_TO')
     })
 
     it('does not connect when the attempt was aborted before it started', async () => {
