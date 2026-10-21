@@ -109,6 +109,7 @@ function server(overrides: Replies = {}) {
             connect,
             now: () => NOW,
             signal,
+            channel: 'mail',
         }),
     }
 }
@@ -241,7 +242,7 @@ describe('smtp', () => {
     it('sends to the message\'s own recipients when ALLOW_TO lets every one of them through', async () => {
         const fake = server()
         const to = 'Boss <Boss@Example.NET>, team@example.org'
-        await smtp.send({ ...message, to }, { ...params, ALLOW_TO: '*@example.org, boss@example.net' }, fake.ctx())
+        await smtp.send({ ...message, to: { mail: to } }, { ...params, ALLOW_TO: '*@example.org, boss@example.net' }, fake.ctx())
         const rcpt = fake.sent.filter((s) => s.line.startsWith('RCPT')).map((s) => s.line)
         expect(rcpt).toEqual(['RCPT TO:<Boss@Example.NET>', 'RCPT TO:<team@example.org>'])
         const data = fake.sent.find((s, i) => fake.sent[i - 1]?.line === 'DATA')!.line
@@ -250,8 +251,17 @@ describe('smtp', () => {
 
     it('lets any recipient through with ALLOW_TO=*', async () => {
         const fake = server()
-        await smtp.send({ ...message, to: 'anyone@anywhere.example' }, { ...params, ALLOW_TO: '*' }, fake.ctx())
+        await smtp.send({ ...message, to: { mail: 'anyone@anywhere.example' } }, { ...params, ALLOW_TO: '*' }, fake.ctx())
         expect(fake.sent.filter((s) => s.line.startsWith('RCPT')).map((s) => s.line)).toEqual(['RCPT TO:<anyone@anywhere.example>'])
+    })
+
+    it('keeps TO when the message names recipients only for other channels', async () => {
+        const fake = server()
+        await smtp.send({ ...message, to: { other: 'team@example.org' } }, { ...params, ALLOW_TO: '*' }, fake.ctx())
+        expect(fake.sent.filter((s) => s.line.startsWith('RCPT')).map((s) => s.line)).toEqual([
+            'RCPT TO:<you@example.com>',
+            'RCPT TO:<ops@example.com>',
+        ])
     })
 
     it.each([
@@ -261,7 +271,7 @@ describe('smtp', () => {
         ['a malformed ALLOW_TO', { ALLOW_TO: 'example.org' }, 'team@example.org', 'invalid ALLOW_TO'],
     ])('refuses %s before connecting, never falling back to TO', async (_, extra, to, error) => {
         const fake = server()
-        expect(await failure(smtp.send({ ...message, to }, { ...params, ...extra }, fake.ctx()))).toBe(error)
+        expect(await failure(smtp.send({ ...message, to: { mail: to } }, { ...params, ...extra }, fake.ctx()))).toBe(error)
         expect(fake.connections).toHaveLength(0)
     })
 

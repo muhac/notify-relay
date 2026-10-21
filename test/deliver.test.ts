@@ -46,6 +46,19 @@ function setup(spec: Record<string, Behaviour[]>, extra: Channel[] = []) {
 }
 
 describe('deliver', () => {
+    it('tells each adapter which channel it is sending for', async () => {
+        const seen: string[] = []
+        const adapter: Outbound = { type: 'fake', params: [], send: async (_msg, _params, ctx) => void seen.push(ctx.channel) }
+        const channels = new Map<string, Channel>(
+            ['ops', 'family'].map((name) => [name, { name, type: 'fake', adapter, params: {}, missing: [] }]),
+        )
+        const connect = (): Socket => {
+            throw new Error('fake channels do not connect')
+        }
+        await deliver(message, ['ops', 'family'], [], { channels, fetch: async () => new Response(null), connect, now: () => 0, sleep: async () => {} })
+        expect(seen.sort()).toEqual(['family', 'ops'])
+    })
+
     it('sends to the whole primary group', async () => {
         const { calls, deps } = setup({ a: ['ok'], b: ['ok'] })
         const outcome = await deliver(message, ['a', 'b'], ['c'], deps)

@@ -18,7 +18,7 @@ function fake(token: Response, sent: Response = Response.json({ id: 'm1' })) {
     const connect = (): Socket => {
         throw new Error('gmail does not connect')
     }
-    return { requests, ctx: { fetch, connect, now: () => 0, signal: new AbortController().signal } }
+    return { requests, ctx: { fetch, connect, now: () => 0, signal: new AbortController().signal, channel: 'gmail' } }
 }
 
 const granted = () => Response.json({ access_token: 'ya29.access', expires_in: 3599, token_type: 'Bearer' })
@@ -170,14 +170,14 @@ describe('gmail', () => {
 
     it('addresses the message\'s own recipients when ALLOW_TO allows them', async () => {
         const { requests, ctx } = fake(granted())
-        await gmail.send({ ...message, to: 'team@example.org' }, { ...params, ALLOW_TO: '*@example.org' }, ctx)
+        await gmail.send({ ...message, to: { gmail: 'team@example.org' } }, { ...params, ALLOW_TO: '*@example.org' }, ctx)
         const { headers } = await sentMail(requests[1]!)
         expect(headers.to).toBe('team@example.org')
     })
 
     it('refuses the message\'s own recipients on a channel without ALLOW_TO, before minting a token', async () => {
         const { requests, ctx } = fake(granted())
-        const error = await gmail.send({ ...message, to: 'team@example.org' }, params, ctx).catch((e: unknown) => e)
+        const error = await gmail.send({ ...message, to: { gmail: 'team@example.org' } }, params, ctx).catch((e: unknown) => e)
         expect((error as Error).message).toBe('custom recipients not enabled')
         expect(requests).toHaveLength(0)
     })

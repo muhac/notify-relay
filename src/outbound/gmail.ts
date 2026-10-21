@@ -1,7 +1,7 @@
 import { param } from '../core/channels'
 import type { Outbound } from '../core/deliver'
 import { expectOk } from '../core/http'
-import { addressing, base64, mime, recipients, utf8 } from './mail'
+import { addressing, base64, mime, recipients, refuseRecipients, utf8 } from './mail'
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const SEND_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send'
@@ -13,8 +13,9 @@ export const gmail: Outbound = {
     type: 'gmail',
     params: ['CLIENT_ID', 'CLIENT_SECRET', 'REFRESH_TOKEN', 'TO'],
     optional: ['FROM', 'ALLOW_TO'],
-    async send(message, params, { fetch, signal }) {
-        const { headers } = addressing(recipients(params, message), params.FROM)
+    recipients: refuseRecipients,
+    async send(message, params, { fetch, signal, channel }) {
+        const { headers } = addressing(recipients(params, message.to?.[channel]), params.FROM)
 
         const token = await fetch(TOKEN_URL, {
             method: 'POST',

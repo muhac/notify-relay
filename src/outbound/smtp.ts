@@ -1,6 +1,6 @@
 import { param } from '../core/channels'
 import type { Outbound } from '../core/deliver'
-import { addressing, base64, mime, recipients, utf8 } from './mail'
+import { addressing, base64, mime, recipients, refuseRecipients, utf8 } from './mail'
 
 // Submission with AUTH PLAIN, one connection per message: the relay keeps no state. Port 465 is encrypted
 // from the first byte, any other upgrades with STARTTLS. The message is the one gmail sends, plus the Date
@@ -9,8 +9,9 @@ export const smtp: Outbound = {
     type: 'smtp',
     params: ['HOST', 'USER', 'PASSWORD', 'FROM', 'TO'],
     optional: ['PORT', 'ALLOW_TO'],
-    async send(message, params, { connect, now, signal }) {
-        const { headers, from, to } = addressing(recipients(params, message), param(params, 'FROM'))
+    recipients: refuseRecipients,
+    async send(message, params, { connect, now, signal, channel }) {
+        const { headers, from, to } = addressing(recipients(params, message.to?.[channel]), param(params, 'FROM'))
         const port = Number(params.PORT ?? '587')
         if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('invalid PORT')
         const domain = from!.slice(from!.lastIndexOf('@') + 1)

@@ -13,7 +13,7 @@ function capture(response: Response) {
     const connect = (): Socket => {
         throw new Error('loki does not connect')
     }
-    return { requests, ctx: { fetch, connect, now: () => 1_760_000_000_123, signal: new AbortController().signal } }
+    return { requests, ctx: { fetch, connect, now: () => 1_760_000_000_123, signal: new AbortController().signal, channel: 'loki' } }
 }
 
 describe('loki', () => {
