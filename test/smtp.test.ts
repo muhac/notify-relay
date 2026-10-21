@@ -22,7 +22,7 @@ const message: Message = {
 
 const NOW = Date.UTC(2026, 9, 20, 21, 18, 28)
 
-// A reply per verb; the message itself is answered as DATA_END. null hangs up, 'hang' never answers
+// The message itself is answered as DATA_END; null hangs up, 'hang' never answers
 type Replies = Record<string, string | null>
 
 const DEFAULT_REPLIES: Replies = {
@@ -37,8 +37,6 @@ const DEFAULT_REPLIES: Replies = {
     QUIT: '221 bye',
 }
 
-// An SMTP server that answers each command from a script and records what the client sent, and whether
-// the connection was encrypted at the time
 function server(overrides: Replies = {}) {
     const replies = { ...DEFAULT_REPLIES, ...overrides }
     const sent: { line: string; tls: boolean }[] = []

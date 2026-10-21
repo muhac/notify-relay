@@ -7,19 +7,13 @@ export interface SendContext {
     connect: (address: SocketAddress, options: SocketOptions) => Socket
     now: () => number
     signal: AbortSignal
-    // The channel this send is for, which picks the message's recipients for it from `to`
     channel: string
 }
 
-// A channel type. Each configured channel of this type hands send() its own parameters
 export interface Outbound {
     type: string
-    // Read from CHANNEL_<NAME>_<PARAM>; deploys do not check them, /healthz reports any missing
     params: readonly string[]
-    // Read the same way when set, never reported missing
     optional?: readonly string[]
-    // Why the channel refuses recipients a message names for it in `to`, or undefined. Checked before
-    // delivery, so a refusal is the sender's 400; a type without it takes no recipients
     recipients?: (value: string, params: Record<string, string>) => string | undefined
     send(message: Message, params: Record<string, string>, ctx: SendContext): Promise<void>
 }
@@ -67,7 +61,6 @@ export async function deliver(message: Message, channels: string[], fallback: st
     return { ok: delivered.length > 0, delivered, failed }
 }
 
-// undefined on success, otherwise the reason it failed
 async function attempt(message: Message, name: string, deps: Deps): Promise<string | undefined> {
     const channel = deps.channels.get(name)
     if (!channel) return 'unknown channel'
@@ -91,7 +84,7 @@ async function attempt(message: Message, name: string, deps: Deps): Promise<stri
     }
 }
 
-// Does not rely on the adapter passing the signal on to fetch: when time is up, the attempt has failed
+// Races the work instead of trusting the adapter to honour the signal
 async function withTimeout(work: (signal: AbortSignal) => Promise<void>, ms: number): Promise<void> {
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | null = null

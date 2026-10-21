@@ -5,7 +5,6 @@ export default defineConfig({
     plugins: [
         cloudflareTest({
             wrangler: { configPath: './wrangler.jsonc' },
-            // Real deployments get these from `--var` and `wrangler secret put`; tests use placeholders
             miniflare: {
                 bindings: {
                     CHANNEL_LOKI_TYPE: 'loki',

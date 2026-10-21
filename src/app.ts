@@ -18,8 +18,7 @@ const MAX_BODY_BYTES = 64 * 1024
 
 const inbounds: Record<string, Inbound> = { '/webhook': webhook }
 
-// The order matters: the token is checked before the query or body, so an unauthenticated caller
-// learns nothing from validation and never has its body read
+// Token first: an unauthenticated caller learns nothing from validation and never has its body read
 export async function handle(request: Request, env: Env, deps: AppDeps): Promise<Response> {
     const url = new URL(request.url)
     if (url.pathname === '/healthz') {
@@ -64,16 +63,13 @@ export async function handle(request: Request, env: Env, deps: AppDeps): Promise
     )
 }
 
-// Ready when at least one channel is configured, every configured channel has a known type and all
-// its parameters, and some source can authenticate. Says nothing more: /healthz is unauthenticated
 function ready(channels: Map<string, Channel>, env: Env): boolean {
     const configured = [...channels.values()]
     const complete = configured.every((channel) => channel.adapter !== undefined && channel.missing.length === 0)
     return configured.length > 0 && complete && hasSources(env)
 }
 
-// Counts while reading and stops past the limit: Content-Length is not trusted, and an oversized
-// body is never held in memory
+// Content-Length is not trusted
 async function readBody(request: Request): Promise<string | undefined> {
     if (Number(request.headers.get('content-length')) > MAX_BODY_BYTES) return undefined
     if (!request.body) return ''
@@ -109,8 +105,6 @@ function methodNotAllowed(allow: string): Response {
     return new Response(null, { status: 405, headers: { allow } })
 }
 
-// Recipients are the sender's to get right: named for a channel this request uses, of a type that takes
-// them, written in its syntax and admitted by its ALLOW_TO. Retrying would not change any of that
 function refuseRecipients(to: Record<string, string>, used: string[], channels: Map<string, Channel>): string | undefined {
     for (const [name, value] of Object.entries(to)) {
         const channel = channels.get(name)

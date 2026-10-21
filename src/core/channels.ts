@@ -10,8 +10,6 @@ export interface Channel {
     missing: string[]
 }
 
-// CHANNEL_<NAME>_TYPE declares a channel; its parameters are CHANNEL_<NAME>_<PARAM> for each parameter
-// its type declares, read by exact name, so CHANNEL_HOME_LAB_TYPE is the channel home-lab
 export function resolveChannels(env: object, adapters: Record<string, Outbound>): Map<string, Channel> {
     const values = env as Record<string, unknown>
     const channels = new Map<string, Channel>()

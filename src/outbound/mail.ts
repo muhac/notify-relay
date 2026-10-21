@@ -1,13 +1,11 @@
 import { param } from '../core/channels'
 import type { Message } from '../core/message'
 
-// Every part is base64, whose alphabet has no '_', so a fixed boundary can never occur in the content
+// base64 has no '_', so no part can contain the boundary
 const BOUNDARY = '_notify-relay_'
-// RFC 2047 holds a line with encoded-words to 76 characters. Each word gets a line of its own, and 39 bytes
-// of UTF-8 make a 64-character word, which fits after the longest prefix, 'Subject: '
+// RFC 2047 caps encoded-word lines at 76 characters; 39 bytes make 64 after 'Subject: '
 const WORD_BYTES = 39
-// One '@' between runs of printable ASCII that hold nothing delimiting a mailbox. An SMTP envelope without
-// SMTPUTF8 carries ASCII only, so an internationalised domain goes in its xn-- form
+// ASCII only: an SMTP envelope without SMTPUTF8 carries nothing else
 const PART = String.raw`(?:(?![<>",@])[!-~])+`
 const ADDRESS = new RegExp(`^${PART}@${PART}$`)
 const MAILBOX = new RegExp(String.raw`^(.*?)\s*<(${PART}@${PART})>$`)
@@ -19,8 +17,6 @@ export interface Addressing {
     to: string[]
 }
 
-// Why a channel refuses the recipients a message names for it, or undefined. A malformed ALLOW_TO refuses
-// nothing here: only the operator can fix it, so delivery reports it instead
 export function refuseRecipients(value: string, params: Record<string, string>): string | undefined {
     const mailboxes = parseAddresses(value)
     if (mailboxes === undefined) return 'must be one or more email addresses'
@@ -30,8 +26,6 @@ export function refuseRecipients(value: string, params: Record<string, string>):
     return undefined
 }
 
-// The recipients a message names for this channel, when it names any, otherwise TO. Never TO in their
-// place: the mail would reach someone it was not meant for
 export function recipients(params: Record<string, string>, named: string | undefined): string {
     if (params.ALLOW_TO !== undefined && parseAllowlist(params.ALLOW_TO) === undefined) throw new Error('invalid ALLOW_TO')
     if (named === undefined) return param(params, 'TO')
@@ -40,8 +34,6 @@ export function recipients(params: Record<string, string>, named: string | undef
     return named
 }
 
-// TO is one address or more and FROM exactly one; returns their headers and the bare addresses. The error
-// never holds the value, which may be a secret
 export function addressing(to: string, from: string | undefined): Addressing {
     const recipients = mailboxes(to, 'TO')
     const sender = from === undefined ? undefined : mailboxes(from, 'FROM')
@@ -51,7 +43,6 @@ export function addressing(to: string, from: string | undefined): Addressing {
     return { headers, from: sender?.[0]?.address, to: recipients.map((mailbox) => mailbox.address) }
 }
 
-// title is the subject; text, or the title when there is none, the plain body; rich the HTML alternative
 export function mime(headers: string[], message: Message): string {
     const head = [...headers, `Subject: ${words(message.title)}`, 'MIME-Version: 1.0']
     const plain = part('text/plain', message.text || message.title)
@@ -97,8 +88,6 @@ function mailboxes(value: string, param: string): { header: string; address: str
     })
 }
 
-// A comma-separated list of 'address' or 'name <address>', a name holding a comma in double quotes.
-// Undefined when any entry is malformed
 function parseAddresses(value: string): { name: string; address: string }[] | undefined {
     const parsed: { name: string; address: string }[] = []
     for (const item of split(value)) {
@@ -115,8 +104,6 @@ function parseAddresses(value: string): { name: string; address: string }[] | un
     return parsed
 }
 
-// A comma-separated list of '*', '*@domain' or an address, compared without case. Undefined when any
-// pattern is malformed. '*@domain' covers that domain only, not its subdomains
 function parseAllowlist(value: string): ((address: string) => boolean) | undefined {
     const patterns = value.split(',').map((pattern) => pattern.trim().toLowerCase())
     if (!patterns.every((pattern) => pattern === '*' || DOMAIN.test(pattern) || ADDRESS.test(pattern))) return undefined
