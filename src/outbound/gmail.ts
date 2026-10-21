@@ -6,9 +6,6 @@ import { addressing, base64, mime, recipients, refuseRecipients, utf8 } from './
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const SEND_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send'
 
-// Sends as the account that granted the refresh token, which only needs gmail.send. Each message mints
-// its own access token: the relay keeps no state. Fields map one to one and nothing is added, so a
-// sender writing for an email-to-SMS gateway controls every character that arrives
 export const gmail: Outbound = {
     type: 'gmail',
     params: ['CLIENT_ID', 'CLIENT_SECRET', 'REFRESH_TOKEN', 'TO'],

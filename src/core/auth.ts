@@ -14,8 +14,7 @@ export function hasSources(env: object): boolean {
     return Object.entries(env).some(([name, value]) => name.startsWith(PREFIX) && typeof value === 'string' && value.trim())
 }
 
-// The source comes only from the token: a token in TOKEN_LAPTOP_MAC belongs to laptop-mac. Every token is
-// compared, with no early return
+// Every token is compared, with no early return
 export function authenticate(header: string | null, env: object): string | undefined {
     const presented = /^Bearer (\S+)$/i.exec(header ?? '')?.[1]
     if (!presented) return undefined

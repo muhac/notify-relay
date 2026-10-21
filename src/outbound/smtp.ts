@@ -2,9 +2,6 @@ import { param } from '../core/channels'
 import type { Outbound } from '../core/deliver'
 import { addressing, base64, mime, recipients, refuseRecipients, utf8 } from './mail'
 
-// Submission with AUTH PLAIN, one connection per message: the relay keeps no state. Port 465 is encrypted
-// from the first byte, any other upgrades with STARTTLS. The message is the one gmail sends, plus the Date
-// and Message-ID that Gmail would have added
 export const smtp: Outbound = {
     type: 'smtp',
     params: ['HOST', 'USER', 'PASSWORD', 'FROM', 'TO'],
@@ -33,8 +30,7 @@ export const smtp: Outbound = {
             if (!implicit) {
                 await session.step(`EHLO ${domain}`, 'EHLO')
                 await session.step('STARTTLS', 'STARTTLS', [220])
-                // A new session drops whatever arrived in plaintext after the 220, so nothing injected before
-                // the handshake is read as a reply
+                // A new session drops plaintext sent after the 220, which an attacker could inject
                 session.release()
                 socket = socket.startTls()
                 session = new Session(socket)
@@ -44,8 +40,7 @@ export const smtp: Outbound = {
             await session.step(`MAIL FROM:<${from}>`, 'MAIL FROM')
             for (const address of to) await session.step(`RCPT TO:<${address}>`, 'RCPT TO', [250, 251])
             await session.step('DATA', 'DATA', [354])
-            // Every line is a header, a boundary or base64, and none of them can start with '.', so the data
-            // needs no dot-stuffing
+            // No dot-stuffing: no header, boundary or base64 line can start with '.'
             await session.step(`${data}\r\n.`, 'DATA')
             await session.send('QUIT').catch(() => {})
         } finally {
@@ -68,8 +63,6 @@ class Session {
         this.writer = socket.writable.getWriter()
     }
 
-    // Sends a line, if any, and fails unless the reply is a code the SMTP RFCs define as success for that
-    // step. The error names the step and the code, never the server's text, which can quote an address
     async step(line: string | undefined, step: string, accepted = [250]): Promise<void> {
         if (line !== undefined) await this.send(line)
         const code = await this.reply()
@@ -85,7 +78,6 @@ class Session {
         this.writer.releaseLock()
     }
 
-    // A reply is one or more lines; every line but the last has a '-' right after the code
     private async reply(): Promise<number> {
         for (;;) {
             for (let end; (end = this.buffer.indexOf('\r\n')) >= 0; ) {

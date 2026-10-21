@@ -23,7 +23,6 @@ function fake(token: Response, sent: Response = Response.json({ id: 'm1' })) {
 
 const granted = () => Response.json({ access_token: 'ya29.access', expires_in: 3599, token_type: 'Bearer' })
 
-// Decodes the raw RFC 2822 message the relay hands Gmail into its headers and its text parts
 async function sentMail(request: Request) {
     const { raw } = (await request.json()) as { raw: string }
     return { raw, ...parseMail(utf8(raw)) }

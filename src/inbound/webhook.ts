@@ -44,7 +44,6 @@ function https(value: unknown): string {
     throw new BadRequest('url must be https')
 }
 
-// Only the shape: which channels take recipients, and in what syntax, is known once the channels are
 function recipients(value: unknown): Record<string, string> {
     const valid =
         typeof value === 'object' && value !== null && !Array.isArray(value) && Object.values(value).every((v) => typeof v === 'string')

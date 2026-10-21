@@ -15,7 +15,6 @@ export async function expectOk(response: Response): Promise<void> {
     throw new Error(`HTTP ${response.status}`)
 }
 
-// Missing, or an HTTP date: treat it as a long wait rather than block the request on it
 function retryAfterMs(value: string | null): number {
     if (value === null || value.trim() === '') return Infinity
     const seconds = Number(value)

@@ -138,7 +138,6 @@ describe('recipients a message names in to', () => {
         [`CHANNEL_${name}_TO`]: to,
     })
 
-    // Two gmail channels next to loki; records every request and the To header of each mail sent
     function setup(extra: Record<string, string> = {}) {
         const requests: string[] = []
         const to: string[] = []
@@ -212,7 +211,6 @@ describe('GET /healthz', () => {
         expect(pushed).toEqual([])
     })
 
-    // Deploys do not check settings, so this is where a missing one shows up
     it('is 503 while a configured channel is missing a parameter', async () => {
         for (const missing of ['CHANNEL_LOKI_TOKEN', 'CHANNEL_LOKI_URL']) {
             const { send } = setup(204, { [missing]: undefined })

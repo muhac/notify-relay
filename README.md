@@ -53,7 +53,7 @@ names are the deployment's own (see [Channels](#channels)), not channel types.
 | `url` | no | A link back to the source; https only |
 | `key` | no | On channels that support it, a new message with the same key replaces the previous one |
 | `group` | no | Display grouping |
-| `to` | no | Recipients by channel name, e.g. `{"mail": "ops@example.com"}`, each in that channel type's syntax. A channel not named keeps its own; see [Recipients](#recipients) |
+| `to` | no | Recipients by channel name, e.g. `{"mail": "ops@example.com"}`; see [Recipients](#recipients) |
 
 `title`, `text` and `rich` are the content. A channel that renders markup shows `rich` when it is given,
 the others show `text`; the relay neither checks that the two agree nor derives one from the other. The
@@ -65,24 +65,16 @@ Unknown fields are a 400, so a misspelled field fails at the sender instead of b
 
 ### Recipients
 
-Each channel delivers to the recipients configured for it (`TO` on mail channels), so by default a sender
-cannot pick an address. A channel whose type takes recipients can be opened with `ALLOW_TO`, listing who a
-message may name; `to` then names them per channel:
+A channel delivers to its configured recipients (`TO` on mail channels) unless `to` names others for it:
 
 ```json
-{"title": "invoice paid", "to": {"mail": "Jane <jane@example.com>", "backup": "jane@example.com"}}
+{"title": "invoice paid", "to": {"mail": "Jane <jane@example.com>"}}
 ```
 
-The relay checks `to` after authentication and before any delivery, and answers 400 unless every entry
-names a channel in this request's `channels` or `fallback`, of a type that takes recipients, written in its
-syntax and admitted by its `ALLOW_TO`. A channel the message names no recipients for delivers to its own,
-fallback channels included: to reach the same people through a fallback, name them for it too. A channel
-never sends to its own recipients in place of those a message names, which would reach someone the mail
-was not meant for.
-
-Once a channel admits a recipient, any sender token can reach that recipient through it, so keep
-`ALLOW_TO` as narrow as the senders need. The mail types (`smtp`, `gmail`) take recipients; `loki` does
-not.
+Each entry must name a channel in `channels` or `fallback`, of a type that takes recipients (`smtp`,
+`gmail`), written in that type's syntax and admitted by the channel's `ALLOW_TO`; otherwise the request is
+a 400 and nothing is delivered. A channel without an entry, a fallback included, uses its own recipients.
+Any sender token can reach whoever `ALLOW_TO` admits, so keep it narrow.
 
 ### Responses
 
@@ -111,10 +103,10 @@ request; the caller retries.
 ### Health
 
 `GET /healthz` needs no token and calls no channel. It answers 200 when at least one channel is
-configured, every configured channel has a known type and all of that type's required parameters, and at least
-one source token exists; 503 otherwise, without saying what is missing. Channel types nobody configured
-are not checked. Deploys do not check settings (see [Configuration](#configuration)), so point an
-external probe here.
+configured, every configured channel has a known type and all of that type's required parameters, and at
+least one source token exists; 503 otherwise, without saying what is missing. Channel types nobody
+configured are not checked. Deploys do not check settings (see [Configuration](#configuration)), so point
+an external probe here.
 
 ## Authentication
 
@@ -160,8 +152,8 @@ CHANNEL_ARCHIVE_TYPE=loki               # a second channel of the same type
 ### `loki`
 
 Pushes each message as one log line to Loki's `/loki/api/v1/push` with basic auth. Labels hold only
-low-cardinality fields (`job="notify-relay"`, `source`, `level`); every other field is in the line's
-JSON as sent. Handy as a first channel: a line you can query is a positive signal that delivery works, and it
+low-cardinality fields (`job="notify-relay"`, `source`, `level`); every other field is in the line's JSON
+as sent. Handy as a first channel: a line you can query is a positive signal that delivery works, and it
 doubles as a record of everything sent.
 
 | Parameter | Keep as | Meaning |
@@ -172,40 +164,27 @@ doubles as a record of everything sent.
 
 ### `smtp`
 
-Submits an email to an SMTP server: a mailbox provider's or a sending service's submission endpoint.
-`title` is the subject and `text` the plain-text body, or the title again when there is no `text`. With
-`rich`, the mail is `multipart/alternative` and `rich` is its HTML part; clients that render HTML show it,
-the rest show the plain text. `url`, `key`, `group` and `level` are not used: a link belongs in the
-content. Recipients a message names for the channel in `to` replace `TO` where `ALLOW_TO` admits them.
-The relay adds the `Date` and `Message-ID` headers.
+Submits an email to an SMTP server, a mailbox provider's or a sending service's. `title` is the subject,
+`text` the plain-text body (the title again when there is none), and `rich`, when given, the HTML
+alternative. `url`, `key`, `group` and `level` are not used: a link belongs in the content.
 
-Each message opens its own connection and runs `EHLO`, `STARTTLS`, `EHLO`, `AUTH PLAIN`, `MAIL FROM`, one
-`RCPT TO` per address, `DATA` and `QUIT`; on port 465 the connection is encrypted from the start, so it
-skips the first `EHLO` and `STARTTLS`. Credentials never cross an unencrypted connection: a server that
-refuses `STARTTLS` fails the delivery.
+Each message opens its own connection and authenticates with `AUTH PLAIN` over TLS: implicit on port 465,
+`STARTTLS` on any other. A server that refuses `STARTTLS` fails the delivery.
 
 | Parameter | Keep as | Meaning |
 |---|---|---|
 | `HOST` | variable | The submission server, e.g. `smtp.example.com` |
-| `PORT` | variable, optional | Defaults to 587. 465 means implicit TLS, any other port STARTTLS. Workers cannot connect to port 25 |
+| `PORT` | variable, optional | Defaults to 587. Workers cannot connect to port 25 |
 | `USER` | variable or secret | The SMTP user name |
 | `PASSWORD` | secret | Its password |
 | `FROM` | variable | The sender; the server must let `USER` send as it |
 | `TO` | variable or secret | The recipients of a message that names none |
-| `ALLOW_TO` | variable, optional | Which recipients a message may name in `to`. Without it, none |
+| `ALLOW_TO` | variable, optional | Recipients a message may name in `to`: `*`, `*@example.com` (not its subdomains) or addresses, comma-separated. Without it, none |
 
-`TO` is one address or several separated by commas, and `FROM` exactly one; each is `address` or
-`Name <address>`, and a name holding a comma goes in double quotes (`"Doe, Jane" <jane@example.com>`).
-Names in any script arrive as written; addresses are ASCII, so an internationalised domain goes in its
-`xn--` form. A malformed value fails delivery with `invalid TO` or `invalid FROM`, without quoting it. A
-rejected step fails delivery with its reply code and the step's name, e.g. `SMTP 535 on AUTH`, without
-the server's text, which can quote an address.
-
-Recipients in `to` are written like `TO`. `ALLOW_TO` is a comma-separated list of `*` (anyone),
-`*@example.com` (that domain, not its subdomains) or an address, compared without case; without it, a
-message naming recipients for the channel is a 400 (`custom recipients not enabled`), and with it, one
-naming anyone outside the list (`recipient not allowed`). A malformed `ALLOW_TO` fails every delivery on
-the channel as `invalid ALLOW_TO`, since only the operator can fix it.
+`TO` and recipients in `to` are one address or several, comma-separated, and `FROM` exactly one; each is
+`address` or `Name <address>`, with a name holding a comma in double quotes. Names may be in any script;
+addresses are ASCII, so an internationalised domain goes in its `xn--` form. A rejected SMTP step fails
+delivery as e.g. `SMTP 535 on AUTH`, without the server's text, which can quote an address.
 
 With a mailbox provider, send from an account of its own: an app password usually opens the whole
 mailbox over IMAP too, not only sending.
@@ -213,8 +192,8 @@ mailbox over IMAP too, not only sending.
 ### `gmail`
 
 Sends an email through the Gmail API, as the Google account that granted the refresh token. The mail is
-the one `smtp` sends, with the fields used the same way; Gmail adds `Date` and `Message-ID` itself. Each
-message first exchanges the refresh token for an access token; nothing is cached.
+the one `smtp` sends. Each message first exchanges the refresh token for an access token; nothing is
+cached.
 
 | Parameter | Keep as | Meaning |
 |---|---|---|
@@ -234,12 +213,12 @@ Getting the refresh token, once:
 - In Google Cloud, enable the Gmail API, add `gmail.send` under the OAuth consent screen's data access,
   and **publish the app to production**: in testing, refresh tokens expire after 7 days. An unverified app
   works for its owner; the consent screen shows a warning.
-- Run the authorization-code flow with a loopback redirect (`http://127.0.0.1:<port>`), `access_type=offline`
-  and `prompt=consent`, then exchange the code for the refresh token.
+- Run the authorization-code flow with a loopback redirect (`http://127.0.0.1:<port>`),
+  `access_type=offline` and `prompt=consent`, then exchange the code for the refresh token.
 
-The token stays valid until the grant is revoked, the account's password changes, or it goes unused for six
-months. A dead token fails delivery with `refresh token revoked or expired (invalid_grant)`; `/healthz`
-cannot see it, since the parameters are still set.
+The token stays valid until the grant is revoked, the account's password changes, or it goes unused for
+six months. A dead token fails delivery with `refresh token revoked or expired (invalid_grant)`;
+`/healthz` cannot see it, since the parameters are still set.
 
 ## Configuration
 
@@ -262,8 +241,9 @@ npx wrangler secret put TOKEN_GITHUB
 
 ## Development
 
-TypeScript, with no runtime dependencies: only APIs available in Workers (`fetch`, `crypto.subtle`, TCP sockets from `cloudflare:sockets`).
-The toolchain (wrangler, vitest with Cloudflare's plugin, typescript) is development-only. Node 24.
+TypeScript, with no runtime dependencies: only APIs available in Workers (`fetch`, `crypto.subtle`, TCP
+sockets from `cloudflare:sockets`). The toolchain (wrangler, vitest with Cloudflare's plugin, typescript)
+is development-only. Node 24.
 
 ```bash
 npm ci
@@ -284,9 +264,9 @@ fake `fetch` or a scripted fake server receives instead of mocking globals.
 - Outbound: implement `Outbound` (`type`, `params`, `send(message, params, ctx)`) and register it in
   `src/outbound/index.ts`. `send` gets the channel's own parameters, never the environment; `params` is
   what a channel of the type must configure and what `/healthz` checks; `optional` lists the ones it may
-  configure, passed when set and never checked. A type whose channels take recipients implements
-  `recipients(value, params)`, returning why it refuses a value from `to` or nothing; `ctx.channel` tells
-  `send` which entry is its own. `TYPE` is reserved.
+  configure, passed when set and never checked. A type that takes recipients implements
+  `recipients(value, params)`, returning why it refuses an entry of `to`, and reads its own entry as
+  `message.to?.[ctx.channel]`. `TYPE` is reserved.
 
 ### Contract
 
