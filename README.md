@@ -56,9 +56,10 @@ names are the deployment's own (see [Channels](#channels)), not channel types.
 | `to` | no | Recipients by channel name, e.g. `{"mail": "ops@example.com"}`; see [Recipients](#recipients) |
 
 `title`, `text` and `rich` are the content. A channel that renders markup shows `rich` when it is given,
-the others show `text`; the relay neither checks that the two agree nor derives one from the other. The
-other fields are metadata, used by the channels that have a place for them and ignored by the rest. Each
-channel type below says which fields it uses.
+the others show `text`; the relay neither checks that the two agree nor derives one from the other.
+`level`, `url`, `key` and `group` are metadata, used by the channels that have a place for them and
+ignored by the rest; each channel type below says which it uses. `to` is checked as
+[Recipients](#recipients) describes.
 
 Unknown fields are a 400, so a misspelled field fails at the sender instead of being dropped. Bodies over
 64 KB are a 413.
@@ -178,7 +179,7 @@ Each message opens its own connection and authenticates with `AUTH PLAIN` over T
 | `USER` | variable or secret | The SMTP user name |
 | `PASSWORD` | secret | Its password |
 | `FROM` | variable | The sender; the server must let `USER` send as it |
-| `TO` | variable or secret | The recipients of a message that names none |
+| `TO` | variable or secret | The recipients unless `to` names others for this channel |
 | `ALLOW_TO` | variable, optional | Recipients a message may name in `to`: `*`, `*@example.com` (not its subdomains) or addresses, comma-separated. Without it, none |
 
 `TO` and recipients in `to` are one address or several, comma-separated, and `FROM` exactly one; each is
@@ -200,7 +201,7 @@ cached.
 | `CLIENT_ID` | variable | OAuth client of type *Desktop app* |
 | `CLIENT_SECRET` | secret | That client's secret |
 | `REFRESH_TOKEN` | secret | Granted with the `https://www.googleapis.com/auth/gmail.send` scope only |
-| `TO` | variable or secret | The recipients of a message that names none |
+| `TO` | variable or secret | The recipients unless `to` names others for this channel |
 | `FROM` | variable, optional | The sender's name, as `Name <address>`. Without it, Gmail uses the account's own name |
 | `ALLOW_TO` | variable, optional | Which recipients a message may name in `to`. Without it, none |
 
