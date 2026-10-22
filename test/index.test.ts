@@ -45,13 +45,22 @@ describe('the deployed handler', () => {
     it('delivers with the runtime fetch, clock and timer', async () => {
         const fetched = vi
             .spyOn(globalThis, 'fetch')
-            .mockResolvedValueOnce(new Response(null, { status: 429, headers: { 'retry-after': '0' } }))
+            .mockResolvedValueOnce(new Response(null, { status: 429, headers: { 'retry-after': '1' } }))
+        const realSetTimeout = globalThis.setTimeout
+        const waits: number[] = []
+        vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number, ...args: unknown[]) => {
+            if (ms !== 1000) return realSetTimeout(fn, ms, ...args)
+            waits.push(ms)
+            fn()
+            return 0
+        }) as unknown as typeof setTimeout)
         const before = Date.now()
         const response = await call('POST', '/webhook?channels=loki', {
             headers: { authorization: 'Bearer nr_test' },
             body: '{"title":"x"}',
         })
         expect(await response.json()).toEqual({ messages: [{ delivered: ['loki'], failed: [] }] })
+        expect(waits).toEqual([1000])
         expect(fetched).toHaveBeenCalledTimes(2)
         const [url, init] = fetched.mock.calls[1]!
         expect(url).toBe('https://logs.example/loki/api/v1/push')
