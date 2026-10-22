@@ -14,10 +14,18 @@ async function call(method: string, path: string, init: RequestInit<IncomingRequ
     return response
 }
 
-async function send(channel: string): Promise<unknown> {
+async function send(channel: string, html = false): Promise<unknown> {
+    const what = `Sent through ${channel} by the live test, ${html ? 'as HTML with a plain-text alternative' : 'as plain text'}.`
+    const message = {
+        title: `notify-relay live test ${run}`,
+        text: `${what}\nCommit: ${vars.LIVE_COMMIT}\nRun: ${vars.LIVE_RUN}`,
+        ...(html && {
+            rich: `<p>${what}</p><p>Commit: <code>${vars.LIVE_COMMIT}</code><br>Run: <a href="${vars.LIVE_RUN}">${vars.LIVE_RUN}</a></p>`,
+        }),
+    }
     const response = await call('POST', `/webhook?channels=${channel}`, {
         headers: { authorization: 'Bearer nr_live' },
-        body: JSON.stringify({ title: `notify-relay live test ${run}`, text: `Sent through ${channel} by the live test.` }),
+        body: JSON.stringify(message),
     })
     return response.json()
 }
@@ -46,7 +54,12 @@ describe('live', () => {
         expect(await readBack()).toBe(true)
     }, 90_000)
 
-    it.each(['smtp-587', 'smtp-465'])('gets mail through %s accepted', async (channel) => {
-        expect(await send(channel)).toEqual({ messages: [{ delivered: [channel], failed: [] }] })
+    it.each([
+        ['smtp-587', 'plain text', false],
+        ['smtp-587', 'HTML', true],
+        ['smtp-465', 'plain text', false],
+        ['smtp-465', 'HTML', true],
+    ])('gets mail through %s as %s accepted', async (channel, _, html) => {
+        expect(await send(channel, html)).toEqual({ messages: [{ delivered: [channel], failed: [] }] })
     }, 30_000)
 })

@@ -15,6 +15,8 @@ const missing = NAMES.filter((name) => !process.env[name])
 if (missing.length > 0) throw new Error(`missing ${missing.join(', ')}`)
 const live = Object.fromEntries(NAMES.map((name) => [name, process.env[name]!])) as Record<(typeof NAMES)[number], string>
 
+const { GITHUB_SHA, GITHUB_SERVER_URL, GITHUB_REPOSITORY, GITHUB_RUN_ID } = process.env
+
 const smtp = (id: string, port: string) => ({
     [`CHANNEL_${id}_TYPE`]: 'smtp',
     [`CHANNEL_${id}_HOST`]: live.LIVE_SMTP_HOST,
@@ -38,6 +40,8 @@ export default defineConfig({
                     ...smtp('SMTP_587', '587'),
                     ...smtp('SMTP_465', '465'),
                     TOKEN_LIVE: 'nr_live',
+                    LIVE_COMMIT: GITHUB_SHA ?? 'local',
+                    LIVE_RUN: GITHUB_RUN_ID ? `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}` : 'local',
                 },
             },
         }),
