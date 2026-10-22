@@ -259,11 +259,11 @@ every wrangler release. Outbound adapters get `fetch` and `connect` passed in, s
 fake `fetch` or a scripted fake server receives instead of mocking globals.
 
 `npm run test:live` sends through real channels instead: a Loki push that it then reads back, and mail
-to one SMTP server over 587 and 465, as plain text and as HTML, which passes once the server accepts it.
-Each body names the commit and the run. It needs `LIVE_LOKI_URL`,
-`LIVE_LOKI_USER` and `LIVE_LOKI_TOKEN` (`logs:write` and `logs:read`), and `LIVE_SMTP_HOST`,
-`LIVE_SMTP_USER`, `LIVE_SMTP_PASSWORD` and `LIVE_SMTP_ADDRESS` (sender and recipient both). The
-[Live](.github/workflows/live.yml) workflow runs it on `main`, weekly and by hand.
+to one SMTP server, plain text over 587 and HTML over 465, which passes once the server accepts it.
+Each body names the commit and the run. It needs `LIVE_LOKI_URL`, `LIVE_LOKI_USER` and
+`LIVE_LOKI_TOKEN` (`logs:write` and `logs:read`), and `LIVE_SMTP_HOST`, `LIVE_SMTP_USER`,
+`LIVE_SMTP_PASSWORD`, `LIVE_SMTP_FROM` and `LIVE_SMTP_TO`. The [Live](.github/workflows/live.yml)
+workflow runs it on `main`, weekly and by hand.
 
 ### Adding an adapter
 

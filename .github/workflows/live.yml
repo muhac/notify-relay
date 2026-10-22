@@ -50,5 +50,6 @@ jobs:
           LIVE_SMTP_HOST: ${{ secrets.LIVE_SMTP_HOST }}
           LIVE_SMTP_USER: ${{ secrets.LIVE_SMTP_USER }}
           LIVE_SMTP_PASSWORD: ${{ secrets.LIVE_SMTP_PASSWORD }}
-          LIVE_SMTP_ADDRESS: ${{ secrets.LIVE_SMTP_ADDRESS }}
+          LIVE_SMTP_FROM: ${{ secrets.LIVE_SMTP_FROM }}
+          LIVE_SMTP_TO: ${{ secrets.LIVE_SMTP_TO }}
         run: npm run test:live

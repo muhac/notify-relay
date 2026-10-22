@@ -8,7 +8,8 @@ const NAMES = [
     'LIVE_SMTP_HOST',
     'LIVE_SMTP_USER',
     'LIVE_SMTP_PASSWORD',
-    'LIVE_SMTP_ADDRESS',
+    'LIVE_SMTP_FROM',
+    'LIVE_SMTP_TO',
 ] as const
 
 const missing = NAMES.filter((name) => !process.env[name])
@@ -23,8 +24,8 @@ const smtp = (id: string, port: string) => ({
     [`CHANNEL_${id}_PORT`]: port,
     [`CHANNEL_${id}_USER`]: live.LIVE_SMTP_USER,
     [`CHANNEL_${id}_PASSWORD`]: live.LIVE_SMTP_PASSWORD,
-    [`CHANNEL_${id}_FROM`]: live.LIVE_SMTP_ADDRESS,
-    [`CHANNEL_${id}_TO`]: live.LIVE_SMTP_ADDRESS,
+    [`CHANNEL_${id}_FROM`]: live.LIVE_SMTP_FROM,
+    [`CHANNEL_${id}_TO`]: live.LIVE_SMTP_TO,
 })
 
 export default defineConfig({

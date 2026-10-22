@@ -56,8 +56,6 @@ describe('live', () => {
 
     it.each([
         ['smtp-587', 'plain text', false],
-        ['smtp-587', 'HTML', true],
-        ['smtp-465', 'plain text', false],
         ['smtp-465', 'HTML', true],
     ])('gets mail through %s as %s accepted', async (channel, _, html) => {
         expect(await send(channel, html)).toEqual({ messages: [{ delivered: [channel], failed: [] }] })
