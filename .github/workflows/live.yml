@@ -1,0 +1,55 @@
+name: Live
+
+# Sends through real channels: Loki, read back afterwards, and one SMTP server on 587 and 465. Runs on
+# main only, after merges, weekly and by hand, so no unmerged code sees the secrets: a dispatch from
+# another branch is skipped, and the `live` environment holding them admits only main as well.
+# Endpoints and addresses are secrets too, so the public log masks them. Not a required check: a
+# provider outage turns it red without blocking a merge.
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: '5 5 * * 5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live
+
+jobs:
+  live:
+    name: live
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: live
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Live test
+        env:
+          LIVE_LOKI_URL: ${{ secrets.LIVE_LOKI_URL }}
+          LIVE_LOKI_USER: ${{ secrets.LIVE_LOKI_USER }}
+          LIVE_LOKI_TOKEN: ${{ secrets.LIVE_LOKI_TOKEN }}
+          LIVE_SMTP_HOST: ${{ secrets.LIVE_SMTP_HOST }}
+          LIVE_SMTP_USER: ${{ secrets.LIVE_SMTP_USER }}
+          LIVE_SMTP_PASSWORD: ${{ secrets.LIVE_SMTP_PASSWORD }}
+          LIVE_SMTP_FROM: ${{ secrets.LIVE_SMTP_FROM }}
+          LIVE_SMTP_TO: ${{ secrets.LIVE_SMTP_TO }}
+        run: npm run test:live
