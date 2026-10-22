@@ -22,7 +22,7 @@ const message: Message = {
 
 const NOW = Date.UTC(2026, 9, 20, 21, 18, 28)
 
-// The message itself is answered as DATA_END; null hangs up, 'hang' never answers
+// The message itself is answered as DATA_END; null hangs up, 'hang' never answers, 'reset' fails the write
 type Replies = Record<string, string | null>
 
 const DEFAULT_REPLIES: Replies = {
@@ -37,7 +37,7 @@ const DEFAULT_REPLIES: Replies = {
     QUIT: '221 bye',
 }
 
-function server(overrides: Replies = {}) {
+function server(overrides: Replies = {}, { bytewise = false } = {}) {
     const replies = { ...DEFAULT_REPLIES, ...overrides }
     const sent: { line: string; tls: boolean }[] = []
     const connections: { address: SocketAddress; options: SocketOptions }[] = []
@@ -55,7 +55,11 @@ function server(overrides: Replies = {}) {
                     if (text === null) {
                         ended = true
                         controller.close()
-                    } else controller.enqueue(encoder.encode(`${text}\r\n`))
+                        return
+                    }
+                    const bytes = encoder.encode(`${text}\r\n`)
+                    if (bytewise) for (const byte of bytes) controller.enqueue(Uint8Array.of(byte))
+                    else controller.enqueue(bytes)
                 }
             },
         })
@@ -70,6 +74,7 @@ function server(overrides: Replies = {}) {
                     sent.push({ line, tls })
                     const verb = data ? 'DATA_END' : line.split(' ')[0]!.toUpperCase()
                     const answer = verb in replies ? replies[verb]! : '500 unknown'
+                    if (answer === 'reset') throw new Error('connection reset')
                     data = verb === 'DATA' && answer?.startsWith('354') === true
                     reply(answer)
                 }
@@ -225,6 +230,24 @@ describe('smtp', () => {
     it('fails when the server hangs up before accepting the mail', async () => {
         const fake = server({ DATA_END: null })
         expect(await failure(smtp.send(message, params, fake.ctx()))).toBe('SMTP connection closed')
+    })
+
+    it('counts the mail as sent once the server queued it, even if the connection drops at QUIT', async () => {
+        const fake = server({ QUIT: 'reset' })
+        await smtp.send(message, params, fake.ctx())
+        expect(fake.closes()).toBeGreaterThan(0)
+    })
+
+    it('reads replies however the stream splits them', async () => {
+        const fake = server({}, { bytewise: true })
+        await smtp.send(message, params, fake.ctx())
+        expect(fake.sent.at(-1)!.line).toBe('QUIT')
+    })
+
+    it('fails on a reply that is not SMTP, sending nothing', async () => {
+        const fake = server({ greeting: 'HTTP/1.1 400 Bad Request' })
+        expect(await failure(smtp.send(message, params, fake.ctx()))).toBe('SMTP malformed reply')
+        expect(fake.sent).toEqual([])
     })
 
     it('closes the connection when the attempt is aborted', async () => {

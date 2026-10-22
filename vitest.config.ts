@@ -13,6 +13,8 @@ export default defineConfig({
                     CHANNEL_LOKI_TOKEN: 'test-loki-token',
                     TOKEN_TEST: 'nr_test',
                 },
+                outboundService: (request) =>
+                    new Response(null, { status: request.method === 'POST' && request.url === 'https://logs.example/loki/api/v1/push' ? 204 : 502 }),
             },
         }),
     ],

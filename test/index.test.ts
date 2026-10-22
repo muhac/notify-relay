@@ -1,6 +1,6 @@
 import { createExecutionContext, waitOnExecutionContext } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import worker from '../src/index'
 
 async function call(
@@ -33,9 +33,31 @@ describe('/healthz', () => {
 })
 
 describe('the deployed handler', () => {
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
+
     it('serves /webhook and turns away callers without a token', async () => {
         const response = await call('POST', '/webhook?channels=loki', { body: '{"title":"x"}' })
         expect(response.status).toBe(401)
+    })
+
+    it('delivers with the runtime fetch, clock and timer', async () => {
+        const fetched = vi
+            .spyOn(globalThis, 'fetch')
+            .mockResolvedValueOnce(new Response(null, { status: 429, headers: { 'retry-after': '0' } }))
+        const before = Date.now()
+        const response = await call('POST', '/webhook?channels=loki', {
+            headers: { authorization: 'Bearer nr_test' },
+            body: '{"title":"x"}',
+        })
+        expect(await response.json()).toEqual({ messages: [{ delivered: ['loki'], failed: [] }] })
+        expect(fetched).toHaveBeenCalledTimes(2)
+        const [url, init] = fetched.mock.calls[1]!
+        expect(url).toBe('https://logs.example/loki/api/v1/push')
+        const [[ns]] = JSON.parse(init!.body as string).streams[0].values
+        expect(Number(BigInt(ns) / 1_000_000n)).toBeGreaterThanOrEqual(before)
+        expect(Number(BigInt(ns) / 1_000_000n)).toBeLessThanOrEqual(Date.now())
     })
 })
 

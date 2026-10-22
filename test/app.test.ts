@@ -104,6 +104,7 @@ describe('POST /webhook', () => {
                 { ...authorized(null), body: '{"title":' },
                 'body must be valid JSON',
             ],
+            ['/webhook?channels=loki', { ...authorized(null), body: null }, 'body must be valid JSON'],
         ]
         for (const [path, init, reason] of cases) {
             const response = await send(path, init)
@@ -113,11 +114,24 @@ describe('POST /webhook', () => {
         expect(pushed).toEqual([])
     })
 
-    it('refuses bodies over 64 KB', async () => {
+    it('refuses bodies over 64 KB, whatever Content-Length says', async () => {
         const { pushed, send } = setup()
-        const response = await send('/webhook?channels=loki', authorized({ title: 'x', text: 'a'.repeat(64 * 1024) }))
-        expect(response.status).toBe(413)
+        const big = JSON.stringify({ title: 'x', text: 'a'.repeat(64 * 1024) })
+        for (const headers of [{ authorization: 'Bearer nr_github' }, { authorization: 'Bearer nr_github', 'content-length': '10' }]) {
+            const response = await send('/webhook?channels=loki', { method: 'POST', headers, body: big })
+            expect(response.status).toBe(413)
+        }
         expect(pushed).toEqual([])
+    })
+
+    it('refuses a declared Content-Length over 64 KB without reading the body', async () => {
+        const { send } = setup()
+        const response = await send('/webhook?channels=loki', {
+            method: 'POST',
+            headers: { authorization: 'Bearer nr_github', 'content-length': String(64 * 1024 + 1) },
+            body: new ReadableStream({ pull: () => new Promise<void>(() => {}) }),
+        })
+        expect(response.status).toBe(413)
     })
 
     it('only takes POST', async () => {
