@@ -48,8 +48,8 @@ describe('the deployed handler', () => {
             .mockResolvedValueOnce(new Response(null, { status: 429, headers: { 'retry-after': '1' } }))
         const realSetTimeout = globalThis.setTimeout
         const waits: number[] = []
-        vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number, ...args: unknown[]) => {
-            if (ms !== 1000) return realSetTimeout(fn, ms, ...args)
+        vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
+            if (ms !== 1000) return realSetTimeout(fn, ms)
             waits.push(ms)
             fn()
             return 0
