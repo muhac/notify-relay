@@ -16,7 +16,7 @@ export const webhook: Inbound = {
         const draft: Draft = { title: title(input.title), level: level(input.level) }
         for (const field of ['text', 'rich', 'key', 'group'] as const) {
             const value = optionalString(input, field)
-            if (value !== undefined) draft[field] = value
+            if (value) draft[field] = value
         }
         if (input.url !== undefined) draft.url = https(input.url)
         if (input.to !== undefined) draft.to = recipients(input.to)
