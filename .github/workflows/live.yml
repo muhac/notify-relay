@@ -1,9 +1,10 @@
 name: Live
 
 # Sends through real channels: Loki, read back afterwards, and one SMTP server on 587 and 465. Runs on
-# main, weekly and by hand, never on pull requests, so no unmerged code sees the secrets, which live in
-# the main-only `live` environment; endpoints and addresses are secrets too, so the public log masks
-# them. Not a required check: a provider outage turns it red without blocking a merge.
+# main only, after merges, weekly and by hand, so no unmerged code sees the secrets: a dispatch from
+# another branch is skipped, and the `live` environment holding them admits only main as well.
+# Endpoints and addresses are secrets too, so the public log masks them. Not a required check: a
+# provider outage turns it red without blocking a merge.
 
 on:
   push:
@@ -21,6 +22,7 @@ concurrency:
 jobs:
   live:
     name: live
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: live
     env:
