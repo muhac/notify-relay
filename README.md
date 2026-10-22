@@ -258,12 +258,13 @@ npm run dev         # a local Worker
 every wrangler release. Outbound adapters get `fetch` and `connect` passed in, so tests assert on what a
 fake `fetch` or a scripted fake server receives instead of mocking globals.
 
-`npm run test:live` sends through real channels instead: a Loki push that it then reads back, and mail
-to one SMTP server, plain text over 587 and HTML over 465, which passes once the server accepts it.
-Each body names the commit and the run. It needs `LIVE_LOKI_URL`, `LIVE_LOKI_USER` and
-`LIVE_LOKI_TOKEN` (`logs:write` and `logs:read`), and `LIVE_SMTP_HOST`, `LIVE_SMTP_USER`,
-`LIVE_SMTP_PASSWORD`, `LIVE_SMTP_FROM` and `LIVE_SMTP_TO`. The [Live](.github/workflows/live.yml)
-workflow runs it on `main`, weekly and by hand.
+`npm run test:live` sends through real channels instead: a Loki push that it then reads back, mail to
+one SMTP server, plain text over 587 and HTML over 465, and HTML mail through the Gmail API; mail passes
+once the server accepts it. Each body links the commit and the run. It needs `LIVE_LOKI_URL`,
+`LIVE_LOKI_USER` and `LIVE_LOKI_TOKEN` (`logs:write` and `logs:read`); `LIVE_SMTP_HOST`,
+`LIVE_SMTP_USER`, `LIVE_SMTP_PASSWORD`, `LIVE_SMTP_FROM` and `LIVE_SMTP_TO`; and `LIVE_GMAIL_CLIENT_ID`,
+`LIVE_GMAIL_CLIENT_SECRET`, `LIVE_GMAIL_REFRESH_TOKEN`, `LIVE_GMAIL_FROM` and `LIVE_GMAIL_TO`. The
+[Live](.github/workflows/live.yml) workflow runs it on `main`, weekly and by hand.
 
 ### Adding an adapter
 
