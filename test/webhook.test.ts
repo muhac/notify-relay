@@ -58,6 +58,10 @@ describe('webhook', () => {
         expect(() => webhook.parse({ title: 'x', group: false })).toThrow('group must be a string')
     })
 
+    it('treats an empty optional string as left out, so a mail never gets an empty HTML part', () => {
+        expect(webhook.parse({ title: 'x', text: '', rich: '', key: '', group: '' })).toEqual([{ title: 'x', level: 'normal' }])
+    })
+
     it('takes to as channel names mapped to recipients, leaving their syntax to each channel', () => {
         for (const to of ['a@example.com', ['a@example.com'], null, { mail: 1 }, { mail: ['a@example.com'] }]) {
             expect(() => webhook.parse({ title: 'x', to })).toThrow('to must map channel names to recipients')

@@ -59,7 +59,7 @@ names are the deployment's own (see [Channels](#channels)), not channel types.
 the others show `text`; the relay neither checks that the two agree nor derives one from the other.
 `level`, `url`, `key` and `group` are metadata, used by the channels that have a place for them and
 ignored by the rest; each channel type below says which it uses. `to` is checked as
-[Recipients](#recipients) describes.
+[Recipients](#recipients) describes. An empty `text`, `rich`, `key` or `group` counts as left out.
 
 Unknown fields are a 400, so a misspelled field fails at the sender instead of being dropped. Bodies over
 64 KB are a 413.
