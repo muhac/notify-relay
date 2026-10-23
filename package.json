@@ -1,6 +1,6 @@
 {
     "name": "notify-relay",
-    "description": "A stateless notification relay on Cloudflare Workers",
+    "description": "A stateless notification relay for Cloudflare Workers and Node",
     "license": "MIT",
     "repository": {
         "type": "git",
@@ -14,12 +14,16 @@
     "scripts": {
         "test": "vitest run",
         "test:live": "vitest run --config vitest.live.config.ts",
-        "typecheck": "wrangler types && tsc --noEmit -p . && tsc --noEmit -p test",
-        "build": "wrangler deploy --dry-run --outdir dist",
+        "typecheck": "wrangler types && tsc --noEmit -p . && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p test && tsc --noEmit -p test/node",
+        "build": "npm run build:cloudflare && npm run build:node",
+        "build:cloudflare": "wrangler deploy --dry-run --outdir dist/cloudflare",
+        "build:node": "esbuild src/platforms/node.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/node/index.mjs",
         "dev": "wrangler dev"
     },
     "devDependencies": {
         "@cloudflare/vitest-plugin": "1.4.4",
+        "@types/node": "24.19.2",
+        "esbuild": "0.28.2",
         "typescript": "7.0.2",
         "vitest": "5.0.5",
         "wrangler": "4.151.1"

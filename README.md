@@ -1,8 +1,8 @@
 # notify-relay
 
-A stateless notification relay on Cloudflare Workers. Senders POST a message; the relay authenticates
-them, validates the message and delivers it to the channels named in the URL, within the same request.
-There is no queue, no database and no history.
+A stateless notification relay for Cloudflare Workers and Node. Senders POST a message; the relay
+authenticates them, validates the message and delivers it to the channels named in the URL, within the
+same request. There is no queue, no database and no history.
 
 - **Delivers, never stores.** Anything stateful (deduplication, grouping, acknowledgement, escalation,
   dead-man's switches) belongs upstream or in a service built for it, e.g. your alerting system.
@@ -106,15 +106,15 @@ request; the caller retries.
 `GET /healthz` needs no token and calls no channel. It answers 200 when at least one channel is
 configured, every configured channel has a known type and all of that type's required parameters, and at
 least one source token exists; 503 otherwise, without saying what is missing. Channel types nobody
-configured are not checked. Deploys do not check settings (see [Configuration](#configuration)), so point
-an external probe here.
+configured are not checked. Deploys do not check settings (see [Platforms](#platforms)), so point an
+external probe here.
 
 ## Authentication
 
-`Authorization: Bearer <token>`, one token per sender, stored as a Worker secret named
-`TOKEN_<SOURCE>`. A token in `TOKEN_GITHUB` authenticates the source `github` (lowercase, `_` becomes
-`-`). The source comes only from the token, never from the request, and adding a sender means adding a
-secret, not changing code.
+`Authorization: Bearer <token>`, one token per sender, stored as a secret named `TOKEN_<SOURCE>`. A
+token in `TOKEN_GITHUB` authenticates the source `github` (lowercase, `_` becomes `-`). The source comes
+only from the token, never from the request, and adding a sender means adding a secret, not changing
+code.
 
 - A secret may hold several tokens separated by spaces, so a rotation can overlap.
 - Tokens are compared in constant time against every candidate. Failures are a bare 401.
@@ -130,7 +130,7 @@ printf 'nr_%s\n' "$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
 
 A *channel type* is code (`loki`); a *channel* is a configured instance of one, named by the deployment.
 A deployment can configure several channels of the same type and none of another. Each channel is a set
-of Worker bindings:
+of settings, which are Worker bindings or environment variables depending on the [platform](#platforms):
 
 ```text
 CHANNEL_<NAME>_TYPE     the type, e.g. loki; declares the channel
@@ -138,8 +138,8 @@ CHANNEL_<NAME>_<PARAM>  one per parameter of that type; optional ones may be lef
 ```
 
 The channel's name is `<NAME>` in lowercase with `_` turned into `-`, so `CHANNEL_HOME_LAB_TYPE` declares
-`home-lab`, used as `?channels=home-lab`. Parameters are looked up by their exact names. To the Worker a
-variable and a secret are the same binding; keep the sensitive parameters as secrets.
+`home-lab`, used as `?channels=home-lab`. Parameters are looked up by their exact names. The relay reads
+variables and secrets alike; keep the sensitive parameters as secrets.
 
 ```text
 CHANNEL_LOGS_TYPE=loki                  # variable
@@ -221,7 +221,11 @@ The token stays valid until the grant is revoked, the account's password changes
 six months. A dead token fails delivery with `refresh token revoked or expired (invalid_grant)`;
 `/healthz` cannot see it, since the parameters are still set.
 
-## Configuration
+## Platforms
+
+The relay is the same on every platform: the same endpoints, settings and channels.
+
+### Cloudflare Workers
 
 `wrangler.jsonc` holds nothing deployment-specific. Variables are passed at deploy time and secrets are
 set on the Worker:
@@ -240,23 +244,43 @@ npx wrangler secret put TOKEN_GITHUB
 - `workers_dev` and preview URLs are off and no routes are declared. Attach a custom domain yourself
   (dashboard, Terraform, or `routes` in your own config); deploys then leave it alone.
 
-## Development
+### Node
 
-TypeScript, with no runtime dependencies: only APIs available in Workers (`fetch`, `crypto.subtle`, TCP
-sockets from `cloudflare:sockets`). The toolchain (wrangler, vitest with Cloudflare's plugin, typescript)
-is development-only. Node 24.
+An HTTP server on Node 24 or later, built into one file with no dependencies:
 
 ```bash
 npm ci
-npm test            # vitest, inside the Workers runtime (Miniflare)
-npm run typecheck   # wrangler types, then tsc over src and test
-npm run build       # wrangler deploy --dry-run: bundles without deploying or credentials
+npm run build:node
+PORT=8080 TOKEN_GITHUB=nr_... CHANNEL_LOGS_TYPE=loki CHANNEL_LOGS_URL=https://... ... node dist/node/index.mjs
+```
+
+- Settings are environment variables with the same names as on Workers. Every `TOKEN_*` variable is a
+  sender token and every `CHANNEL_*_TYPE` declares a channel, so keep other variables of those shapes out
+  of the process's environment.
+- `PORT` is where it listens, 8080 by default.
+- `SIGTERM` or `SIGINT` stops new connections; requests in flight finish first.
+- Unlike a Worker, it can reach hosts on a private network, and port 25 where the host allows it.
+
+## Development
+
+TypeScript, with no runtime dependencies. The core (`src/app.ts`, `src/core`, `src/inbound`,
+`src/outbound`) uses only web-standard APIs such as `fetch`, `crypto` and streams. Each platform's entry
+under `src/platforms` adapts its runtime to the core and passes in a TCP `connect`: `cloudflare:sockets`
+on Workers, `node:net` and `node:tls` on Node. The toolchain (wrangler, esbuild, vitest with Cloudflare's
+plugin, typescript) is development-only. Node 24.
+
+```bash
+npm ci
+npm test            # vitest: the core on both Workers (Miniflare) and Node, and each platform's own
+npm run typecheck   # wrangler types, then tsc over src and test, with Workers' types and with Node's
+npm run build       # bundles for Workers (wrangler deploy --dry-run, no credentials) and for Node
 npm run dev         # a local Worker
 ```
 
 `worker-configuration.d.ts` is generated by `wrangler types` and not committed, since it changes with
 every wrangler release. Outbound adapters get `fetch` and `connect` passed in, so tests assert on what a
-fake `fetch` or a scripted fake server receives instead of mocking globals.
+fake `fetch` or a scripted fake server receives instead of mocking globals. The Node tests need `openssl`
+on the path, to make a throwaway certificate.
 
 `npm run test:live` sends through real channels instead: a Loki push that it then reads back, mail to one
 SMTP server, plain text over 587 and HTML over 465, and HTML mail through the Gmail API. Mail passes once
@@ -280,6 +304,10 @@ workflow runs it on `main`, weekly and by hand.
   configure, passed when set and never checked. A type that takes recipients implements
   `recipients(value, params)`, returning why it refuses an entry of `to`, and reads its own entry as
   `message.to?.[ctx.channel]`. `TYPE` is reserved.
+- Platform: add an entry under `src/platforms` that turns the platform's request into a `Request` and
+  calls `handle(request, env, deps)`, with the platform's settings as `env`, and `fetch`, `connect`, `now`
+  and `sleep` in `deps`. `connect` provides `Connection` from `src/core/deliver.ts`, the part of
+  Cloudflare's sockets API that `smtp` uses.
 
 ### Contract
 

@@ -100,7 +100,7 @@ async function attempt(message: Message, name: string, deps: Deps): Promise<stri
 // Races the work instead of trusting the adapter to honour the signal
 async function withTimeout(work: (signal: AbortSignal) => Promise<void>, ms: number): Promise<void> {
     const controller = new AbortController()
-    let timer: ReturnType<typeof setTimeout> | null = null
+    let timer!: ReturnType<typeof setTimeout>
     const timeout = new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
             const error = new DOMException('timeout', 'TimeoutError')
