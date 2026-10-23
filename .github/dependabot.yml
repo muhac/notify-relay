@@ -19,3 +19,9 @@ updates:
     groups:
       actions:
         patterns: [ '*' ]
+
+  # Weekly, as the base image's updates are mostly security fixes
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

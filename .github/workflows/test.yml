@@ -1,8 +1,9 @@
 name: Test
 
 # Runs on PRs and main: typecheck, tests on the Workers runtime and on Node, both bundles, and the
-# container image, run as a deployment would. The typecheck is a separate step because esbuild strips
-# types without checking them. Nothing here deploys; deployments pick a commit and run it themselves.
+# container image on amd64 and arm64, run as a deployment would. The typecheck is a separate step because
+# esbuild strips types without checking them. Once all of that passes on main, the image is published to
+# GHCR. Nothing here deploys; deployments pick a commit or an image and run it themselves.
 
 on:
   pull_request:
@@ -43,8 +44,12 @@ jobs:
         run: npm run build
 
   docker:
-    name: docker
-    runs-on: ubuntu-latest
+    name: docker (${{ matrix.arch }})
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [ amd64, arm64 ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -56,3 +61,45 @@ jobs:
 
       - name: Smoke test
         run: test/docker/smoke.sh notify-relay:test
+
+  # Here rather than in a workflow_run of its own, which a fork's pull request from a branch named main
+  # could trigger with write access
+  publish:
+    name: publish
+    needs: [ test, docker ]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    concurrency:
+      group: publish
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Push image
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          image="ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
+          echo "$TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker buildx create --use --driver docker-container
+          docker buildx build --platform linux/amd64,linux/arm64 --push --tag "$image:sha-${GITHUB_SHA::7}" \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.licenses=MIT" \
+            .
+
+      # Decided after the build, which takes minutes, and with publish jobs one at a time, so latest never
+      # goes back to an older commit
+      - name: Tag latest
+        run: |
+          if [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$GITHUB_SHA" ]; then
+            docker buildx imagetools create --tag "$IMAGE:latest" "$IMAGE:sha-${GITHUB_SHA::7}"
+          else
+            echo "main has moved on from $GITHUB_SHA, so a newer commit tags latest"
+          fi
