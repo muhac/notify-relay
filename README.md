@@ -309,19 +309,40 @@ aws lambda add-permission --function-name notify-relay --statement-id function-i
   one after another. Lambda's default of 3 seconds is too short.
 - A function reaches a private network only from inside a VPC, and AWS blocks port 25 unless asked.
 
+### Cloud Run functions
+
+An HTTP function served by Google's Functions Framework, from the package `npm run build:gcp` writes to
+`dist/gcp`: the bundle, and a `package.json` naming the framework at the version the tests run against.
+
+```bash
+npm ci
+npm run build:gcp
+gcloud run deploy notify-relay --source dist/gcp --function relay --base-image nodejs24 \
+    --region <region> --allow-unauthenticated --env-vars-file env.yaml
+```
+
+- Settings are the service's environment variables, as on Node: `env.yaml` holds one `NAME: value` per
+  line. Quote values YAML would read otherwise, such as `CHANNEL_MAIL_ALLOW_TO: '*@example.com'`.
+- `--allow-unauthenticated` leaves authentication to the relay's tokens.
+- The framework reads every body before the relay sees it, and answers JSON that does not parse with a
+  400 of its own before the token is checked. The relay sets `NODE_ENV` to `production` unless it is set,
+  so that answer carries no stack trace.
+- Google Cloud blocks port 25. A private network is reachable through Direct VPC egress or a connector.
+
 ## Development
 
-TypeScript, with no runtime dependencies. The core (`src/app.ts`, `src/core`, `src/inbound`,
+TypeScript, with no runtime dependencies, except that Cloud Run functions serves the bundle with the
+Functions Framework, which its package names. The core (`src/app.ts`, `src/core`, `src/inbound`,
 `src/outbound`) uses only web-standard APIs such as `fetch`, `crypto` and streams. Each platform's entry
 under `src/platforms` adapts its runtime to the core and passes in a TCP `connect`: `cloudflare:sockets`
-on Workers, `node:net` and `node:tls` on Node and Lambda. The toolchain (wrangler, esbuild, vitest with
-Cloudflare's plugin, typescript) is development-only. Node 24.
+on Workers, `node:net` and `node:tls` on Node, Lambda and Cloud Run functions. The toolchain (wrangler,
+esbuild, vitest with Cloudflare's plugin, typescript) is development-only. Node 24.
 
 ```bash
 npm ci
 npm test            # vitest: the core on both Workers (Miniflare) and Node, and each platform's own
 npm run typecheck   # wrangler types, then tsc over src and test, with Workers' types and with Node's
-npm run build       # bundles for Workers (wrangler deploy --dry-run, no credentials), Node and Lambda
+npm run build       # bundles for every platform; Workers' with wrangler deploy --dry-run, no credentials
 npm run dev         # a local Worker
 ```
 
@@ -331,7 +352,8 @@ fake `fetch` or a scripted fake server receives instead of mocking globals. The 
 on the path, to make a throwaway certificate. `test/docker/smoke.sh <image>` runs a built image as a
 deployment would and checks it serves, runs as a user other than root, passes its `HEALTHCHECK` and stops
 cleanly on `docker stop`. `test/lambda/smoke.sh [dist/lambda]` runs the Lambda bundle in AWS's Node 24
-base image, whose Runtime Interface Emulator invokes it as Lambda would.
+base image, whose Runtime Interface Emulator invokes it as Lambda would. The Cloud Run functions tests
+build the deploy package and serve it with the Functions Framework, as Cloud Run does.
 
 `npm run test:live` sends through real channels instead: a Loki push that it then reads back, mail to one
 SMTP server, plain text over 587 and HTML over 465, and HTML mail through the Gmail API. Mail passes once
