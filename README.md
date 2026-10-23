@@ -259,12 +259,14 @@ every wrangler release. Outbound adapters get `fetch` and `connect` passed in, s
 fake `fetch` or a scripted fake server receives instead of mocking globals.
 
 `npm run test:live` sends through real channels instead: a Loki push that it then reads back, mail to
-one SMTP server, plain text over 587 and HTML over 465, and HTML mail through the Gmail API; mail passes
-once the server accepts it. Each body links the commit and the run. It needs `LIVE_LOKI_URL`,
-`LIVE_LOKI_USER` and `LIVE_LOKI_TOKEN` (`logs:write` and `logs:read`); `LIVE_SMTP_HOST`,
-`LIVE_SMTP_USER`, `LIVE_SMTP_PASSWORD`, `LIVE_SMTP_FROM` and `LIVE_SMTP_TO`; and `LIVE_GMAIL_CLIENT_ID`,
-`LIVE_GMAIL_CLIENT_SECRET`, `LIVE_GMAIL_REFRESH_TOKEN`, `LIVE_GMAIL_FROM` and `LIVE_GMAIL_TO`. The
-[Live](.github/workflows/live.yml) workflow runs it on `main`, weekly and by hand.
+one SMTP server, plain text over 587 and HTML over 465, and HTML mail through the Gmail API. Mail passes
+once it shows up in the SMTP account's own mailbox, among the newest mail read over IMAP on 993 outside
+its sent, draft and deleted folders, so both recipients must be addresses of that mailbox; landing in junk still passes,
+with a warning. Each body links the commit and the run. It needs `LIVE_LOKI_URL`, `LIVE_LOKI_USER` and
+`LIVE_LOKI_TOKEN` (`logs:write` and `logs:read`); `LIVE_SMTP_HOST`, `LIVE_SMTP_USER`,
+`LIVE_SMTP_PASSWORD`, `LIVE_SMTP_FROM` and `LIVE_SMTP_TO`; `LIVE_GMAIL_CLIENT_ID`,
+`LIVE_GMAIL_CLIENT_SECRET`, `LIVE_GMAIL_REFRESH_TOKEN`, `LIVE_GMAIL_FROM` and `LIVE_GMAIL_TO`; and
+`LIVE_IMAP_HOST`. The [Live](.github/workflows/live.yml) workflow runs it on `main`, weekly and by hand.
 
 ### Adding an adapter
 

@@ -2,9 +2,12 @@ import { createExecutionContext, waitOnExecutionContext } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
 import worker from '../../src/index'
+import { arrival } from './imap'
 
 const run = crypto.randomUUID()
 const vars = env as unknown as Record<string, string>
+const mailbox = { host: vars.LIVE_IMAP_HOST!, user: vars.LIVE_IMAP_USER!, password: vars.LIVE_IMAP_PASSWORD! }
+const title = (channel: string) => `notify-relay live test ${run} via ${channel}`
 
 async function call(method: string, path: string, init: RequestInit<IncomingRequestCfProperties> = {}): Promise<Response> {
     const request = new Request<unknown, IncomingRequestCfProperties>(`https://notify.example${path}`, { method, ...init })
@@ -17,7 +20,7 @@ async function call(method: string, path: string, init: RequestInit<IncomingRequ
 async function send(channel: string, html = false): Promise<unknown> {
     const what = `Sent through ${channel} by the live test, ${html ? 'as HTML with a plain-text alternative' : 'as plain text'}.`
     const message = {
-        title: `notify-relay live test ${run}`,
+        title: title(channel),
         text: `${what}\nCommit: ${vars.LIVE_COMMIT_URL}\nRun: ${vars.LIVE_RUN_URL}`,
         ...(html && {
             rich: `<p>${what}</p><p>Commit: <a href="${vars.LIVE_COMMIT_URL}"><code>${vars.LIVE_COMMIT}</code></a><br>Run: <a href="${vars.LIVE_RUN_URL}">${vars.LIVE_RUN_URL}</a></p>`,
@@ -44,6 +47,14 @@ async function readBack(): Promise<boolean> {
     return false
 }
 
+async function received(channel: string): Promise<string[] | undefined> {
+    for (const deadline = Date.now() + 60_000; Date.now() < deadline; await new Promise((resolve) => setTimeout(resolve, 2000))) {
+        const flags = await arrival(mailbox, title(channel))
+        if (flags) return flags
+    }
+    return undefined
+}
+
 describe('live', () => {
     it('is ready with every channel configured', async () => {
         expect((await call('GET', '/healthz')).status).toBe(200)
@@ -58,7 +69,10 @@ describe('live', () => {
         ['smtp-587', 'plain text', false],
         ['smtp-465', 'HTML', true],
         ['gmail', 'HTML', true],
-    ])('gets mail through %s as %s accepted', async (channel, _, html) => {
+    ])('gets mail through %s as %s into the mailbox', async (channel, _, html) => {
         expect(await send(channel, html)).toEqual({ messages: [{ delivered: [channel], failed: [] }] })
-    }, 30_000)
+        const flags = await received(channel)
+        expect(flags).toBeDefined()
+        if (flags!.some((flag) => flag.toLowerCase() === '\\junk')) console.warn(`${channel}: landed in junk`)
+    }, 90_000)
 })
