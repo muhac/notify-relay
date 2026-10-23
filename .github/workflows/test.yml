@@ -1,8 +1,8 @@
 name: Test
 
-# Runs on PRs and main: typecheck, tests inside the Workers runtime, and a dry-run bundle. The
-# typecheck is a separate step because wrangler bundles with esbuild, which strips types without
-# checking them. Nothing here deploys; deployments pick a commit and run wrangler themselves.
+# Runs on PRs and main: typecheck, tests on the Workers runtime and on Node, both bundles, and the
+# container image, run as a deployment would. The typecheck is a separate step because esbuild strips
+# types without checking them. Nothing here deploys; deployments pick a commit and run it themselves.
 
 on:
   pull_request:
@@ -41,3 +41,18 @@ jobs:
 
       - name: Bundle
         run: npm run build
+
+  docker:
+    name: docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: docker build --tag notify-relay:test .
+
+      - name: Smoke test
+        run: test/docker/smoke.sh notify-relay:test

@@ -1,0 +1,6 @@
+# Only what the build reads, so nothing else, such as .dev.vars, can reach the build context
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!src
