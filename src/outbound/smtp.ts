@@ -1,5 +1,5 @@
 import { param } from '../core/channels'
-import type { Outbound } from '../core/deliver'
+import type { Connection, Outbound } from '../core/deliver'
 import { addressing, base64, mime, recipients, refuseRecipients, utf8 } from './mail'
 
 export const smtp: Outbound = {
@@ -58,7 +58,7 @@ class Session {
     private readonly decoder = new TextDecoder()
     private buffer = ''
 
-    constructor(socket: Socket) {
+    constructor(socket: Connection) {
         this.reader = socket.readable.getReader()
         this.writer = socket.writable.getWriter()
     }

@@ -35,7 +35,7 @@ function setup(spec: Record<string, Behaviour[]>, extra: Channel[] = []) {
     const deps = {
         channels,
         fetch: async () => new Response(null),
-        connect: (): Socket => {
+        connect: (): never => {
             throw new Error('fake channels do not connect')
         },
         now: () => 0,
@@ -52,7 +52,7 @@ describe('deliver', () => {
         const channels = new Map<string, Channel>(
             ['ops', 'family'].map((name) => [name, { name, type: 'fake', adapter, params: {}, missing: [] }]),
         )
-        const connect = (): Socket => {
+        const connect = (): never => {
             throw new Error('fake channels do not connect')
         }
         await deliver(message, ['ops', 'family'], [], { channels, fetch: async () => new Response(null), connect, now: () => 0, sleep: async () => {} })

@@ -15,7 +15,7 @@ function fake(token: Response, sent: Response = Response.json({ id: 'm1' })) {
         requests.push(request)
         return request.url === TOKEN_URL ? token.clone() : sent.clone()
     }
-    const connect = (): Socket => {
+    const connect = (): never => {
         throw new Error('gmail does not connect')
     }
     return { requests, ctx: { fetch, connect, now: () => 0, signal: new AbortController().signal, channel: 'gmail' } }
