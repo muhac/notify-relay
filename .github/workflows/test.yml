@@ -85,15 +85,21 @@ jobs:
           TOKEN: ${{ github.token }}
         run: |
           image="ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
-          tags=(--tag "$image:sha-${GITHUB_SHA::7}")
-          # Runs can finish out of order; a newer commit on main publishes latest itself
-          if [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$GITHUB_SHA" ]; then
-            tags+=(--tag "$image:latest")
-          fi
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
           echo "$TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
           docker buildx create --use --driver docker-container
-          docker buildx build --platform linux/amd64,linux/arm64 --push "${tags[@]}" \
+          docker buildx build --platform linux/amd64,linux/arm64 --push --tag "$image:sha-${GITHUB_SHA::7}" \
             --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.revision=$GITHUB_SHA" \
             --label "org.opencontainers.image.licenses=MIT" \
             .
+
+      # Decided after the build, which takes minutes, and with publish jobs one at a time, so latest never
+      # goes back to an older commit
+      - name: Tag latest
+        run: |
+          if [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$GITHUB_SHA" ]; then
+            docker buildx imagetools create --tag "$IMAGE:latest" "$IMAGE:sha-${GITHUB_SHA::7}"
+          else
+            echo "main has moved on from $GITHUB_SHA, so a newer commit tags latest"
+          fi
