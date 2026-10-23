@@ -1,7 +1,7 @@
 {
     "$schema": "node_modules/wrangler/config-schema.json",
     "name": "notify-relay",
-    "main": "src/index.ts",
+    "main": "src/platforms/cloudflare.ts",
     "compatibility_date": "2026-10-01",
     "compatibility_flags": ["no_nodejs_compat", "no_nodejs_compat_v2"],
     "workers_dev": false,
