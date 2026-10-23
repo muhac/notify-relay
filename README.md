@@ -296,6 +296,8 @@ aws lambda create-function --function-name notify-relay --runtime nodejs24.x --h
 aws lambda create-function-url-config --function-name notify-relay --auth-type NONE
 aws lambda add-permission --function-name notify-relay --statement-id function-url \
     --action lambda:InvokeFunctionUrl --principal '*' --function-url-auth-type NONE
+aws lambda add-permission --function-name notify-relay --statement-id function-invoke \
+    --action lambda:InvokeFunction --principal '*' --invoked-via-function-url
 ```
 
 - Settings are the function's environment variables, as on Node: `env.json` is
