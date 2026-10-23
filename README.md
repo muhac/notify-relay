@@ -281,19 +281,47 @@ docker run --publish 8080:8080 --env-file relay.env ghcr.io/therank/notify-relay
 - Its `HEALTHCHECK` probes `/healthz`, so a relay that is not ready shows as unhealthy. A platform that
   probes on its own can point at `/healthz` as well.
 
+### AWS Lambda
+
+A function behind a Function URL or an HTTP API, which send events in payload format 2.0. REST APIs send
+1.0, which the relay answers with a 500.
+
+```bash
+npm ci
+npm run build:lambda
+(cd dist/lambda && zip ../lambda.zip index.mjs)
+aws lambda create-function --function-name notify-relay --runtime nodejs24.x --handler index.handler \
+    --zip-file fileb://dist/lambda.zip --role <execution role ARN> \
+    --timeout 30 --environment file://env.json
+aws lambda create-function-url-config --function-name notify-relay --auth-type NONE
+aws lambda add-permission --function-name notify-relay --statement-id function-url \
+    --action lambda:InvokeFunctionUrl --principal '*' --function-url-auth-type NONE
+aws lambda add-permission --function-name notify-relay --statement-id function-invoke \
+    --action lambda:InvokeFunction --principal '*' --invoked-via-function-url
+```
+
+- Settings are the function's environment variables, as on Node: `env.json` is
+  `{"Variables": {"TOKEN_GITHUB": "nr_...", ...}}`. Lambda allows 4 KB of them in all.
+- `--auth-type NONE` leaves authentication to the relay's tokens; with `AWS_IAM`, senders would have to
+  sign their requests. The two `add-permission` statements are the resource policy a public URL needs,
+  which the console creates by itself; without either, the URL answers 403.
+- The timeout must cover the slowest delivery: up to 5 seconds per channel attempt, with fallbacks tried
+  one after another. Lambda's default of 3 seconds is too short.
+- A function reaches a private network only from inside a VPC, and AWS blocks port 25 unless asked.
+
 ## Development
 
 TypeScript, with no runtime dependencies. The core (`src/app.ts`, `src/core`, `src/inbound`,
 `src/outbound`) uses only web-standard APIs such as `fetch`, `crypto` and streams. Each platform's entry
 under `src/platforms` adapts its runtime to the core and passes in a TCP `connect`: `cloudflare:sockets`
-on Workers, `node:net` and `node:tls` on Node. The toolchain (wrangler, esbuild, vitest with Cloudflare's
-plugin, typescript) is development-only. Node 24.
+on Workers, `node:net` and `node:tls` on Node and Lambda. The toolchain (wrangler, esbuild, vitest with
+Cloudflare's plugin, typescript) is development-only. Node 24.
 
 ```bash
 npm ci
 npm test            # vitest: the core on both Workers (Miniflare) and Node, and each platform's own
 npm run typecheck   # wrangler types, then tsc over src and test, with Workers' types and with Node's
-npm run build       # bundles for Workers (wrangler deploy --dry-run, no credentials) and for Node
+npm run build       # bundles for Workers (wrangler deploy --dry-run, no credentials), Node and Lambda
 npm run dev         # a local Worker
 ```
 
@@ -302,7 +330,8 @@ every wrangler release. Outbound adapters get `fetch` and `connect` passed in, s
 fake `fetch` or a scripted fake server receives instead of mocking globals. The Node tests need `openssl`
 on the path, to make a throwaway certificate. `test/docker/smoke.sh <image>` runs a built image as a
 deployment would and checks it serves, runs as a user other than root, passes its `HEALTHCHECK` and stops
-cleanly on `docker stop`.
+cleanly on `docker stop`. `test/lambda/smoke.sh [dist/lambda]` runs the Lambda bundle in AWS's Node 24
+base image, whose Runtime Interface Emulator invokes it as Lambda would.
 
 `npm run test:live` sends through real channels instead: a Loki push that it then reads back, mail to one
 SMTP server, plain text over 587 and HTML over 465, and HTML mail through the Gmail API. Mail passes once

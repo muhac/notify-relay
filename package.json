@@ -15,9 +15,10 @@
         "test": "vitest run",
         "test:live": "vitest run --config vitest.live.config.ts",
         "typecheck": "wrangler types && tsc --noEmit -p . && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p test && tsc --noEmit -p test/node",
-        "build": "npm run build:cloudflare && npm run build:node",
+        "build": "npm run build:cloudflare && npm run build:node && npm run build:lambda",
         "build:cloudflare": "wrangler deploy --dry-run --outdir dist/cloudflare",
         "build:node": "esbuild src/platforms/node.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/node/index.mjs",
+        "build:lambda": "esbuild src/platforms/lambda.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/lambda/index.mjs",
         "dev": "wrangler dev"
     },
     "devDependencies": {

@@ -1,9 +1,10 @@
 name: Test
 
-# Runs on PRs and main: typecheck, tests on the Workers runtime and on Node, both bundles, and the
-# container image on amd64 and arm64, run as a deployment would. The typecheck is a separate step because
-# esbuild strips types without checking them. Once all of that passes on main, the image is published to
-# GHCR. Nothing here deploys; deployments pick a commit or an image and run it themselves.
+# Runs on PRs and main: typecheck, tests on the Workers runtime and on Node, the bundles, the container
+# image on amd64 and arm64, and the Lambda bundle in AWS's runtime, each run as a deployment would. The
+# typecheck is a separate step because esbuild strips types without checking them. Once the tests and
+# the image pass on main, the image is published to GHCR. Nothing here deploys; deployments pick a commit
+# or an image and run it themselves.
 
 on:
   pull_request:
@@ -61,6 +62,32 @@ jobs:
 
       - name: Smoke test
         run: test/docker/smoke.sh notify-relay:test
+
+  lambda:
+    name: lambda
+    runs-on: ubuntu-latest
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Bundle
+        run: npm run build:lambda
+
+      - name: Smoke test
+        run: test/lambda/smoke.sh dist/lambda
 
   # Here rather than in a workflow_run of its own, which a fork's pull request from a branch named main
   # could trigger with write access
