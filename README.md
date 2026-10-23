@@ -318,15 +318,19 @@ An HTTP function served by Google's Functions Framework, from the package `npm r
 npm ci
 npm run build:gcp
 gcloud run deploy notify-relay --source dist/gcp --function relay --base-image nodejs24 \
-    --region <region> --allow-unauthenticated --env-vars-file env.yaml
+    --region <region> --allow-unauthenticated --concurrency 8 --env-vars-file env.yaml
 ```
 
 - Settings are the service's environment variables, as on Node: `env.yaml` holds one `NAME: value` per
   line. Quote values YAML would read otherwise, such as `CHANNEL_MAIL_ALLOW_TO: '*@example.com'`.
 - `--allow-unauthenticated` leaves authentication to the relay's tokens.
-- The framework reads every body before the relay sees it, and answers JSON that does not parse with a
-  400 of its own before the token is checked. The relay sets `NODE_ENV` to `production` unless it is set,
-  so that answer carries no stack trace.
+- The framework reads every body into memory, up to Cloud Run's 32 MB, before the relay sees it: the
+  token and the 64 KB limit are checked only after that, so any caller can make an instance hold a large
+  body. `--concurrency 8` keeps eight of them within Cloud Run's default 512 MiB. For a public endpoint,
+  prefer the [container image](#docker) on Cloud Run, which checks the token before reading anything and
+  stops at 64 KB.
+- JSON that does not parse gets a 400 from the framework itself, before the token is checked. The relay
+  sets `NODE_ENV` to `production` unless it is set, so that answer carries no stack trace.
 - Google Cloud blocks port 25. A private network is reachable through Direct VPC egress or a connector.
 
 ## Development
