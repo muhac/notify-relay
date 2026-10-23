@@ -266,13 +266,18 @@ PORT=8080 TOKEN_GITHUB=nr_... CHANNEL_LOGS_TYPE=loki CHANNEL_LOGS_URL=https://..
 The Node server in an image of its own: `node:24-alpine` and the one bundled file, run as `node`, not
 root. It runs wherever containers do, such as Cloud Run, Fly.io, Railway, Render, ECS or Kubernetes.
 
+Each commit on `main` that passes CI is published for linux/amd64 and linux/arm64 as
+`ghcr.io/therank/notify-relay:sha-<commit>`, and as `latest` while it is the newest:
+
 ```bash
-docker build --tag notify-relay .
-docker run --publish 8080:8080 --env-file relay.env notify-relay
+docker run --publish 8080:8080 --env-file relay.env ghcr.io/therank/notify-relay:latest
 ```
 
 - `relay.env` holds the settings, one `NAME=value` per line. Docker takes each value as written, quotes
   included.
+- `latest` moves with every merge; pin `sha-<commit>` where a deploy must be repeatable.
+- To build it yourself: `docker build --tag notify-relay .`. The base image is pinned by digest, and
+  Dependabot proposes its updates weekly.
 - Its `HEALTHCHECK` probes `/healthz`, so a relay that is not ready shows as unhealthy. A platform that
   probes on its own can point at `/healthz` as well.
 
