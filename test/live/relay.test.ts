@@ -18,9 +18,9 @@ async function send(channel: string, html = false): Promise<unknown> {
     const what = `Sent through ${channel} by the live test, ${html ? 'as HTML with a plain-text alternative' : 'as plain text'}.`
     const message = {
         title: `notify-relay live test ${run}`,
-        text: `${what}\nCommit: ${vars.LIVE_COMMIT}\nRun: ${vars.LIVE_RUN}`,
+        text: `${what}\nCommit: ${vars.LIVE_COMMIT_URL}\nRun: ${vars.LIVE_RUN_URL}`,
         ...(html && {
-            rich: `<p>${what}</p><p>Commit: <code>${vars.LIVE_COMMIT}</code><br>Run: <a href="${vars.LIVE_RUN}">${vars.LIVE_RUN}</a></p>`,
+            rich: `<p>${what}</p><p>Commit: <a href="${vars.LIVE_COMMIT_URL}"><code>${vars.LIVE_COMMIT}</code></a><br>Run: <a href="${vars.LIVE_RUN_URL}">${vars.LIVE_RUN_URL}</a></p>`,
         }),
     }
     const response = await call('POST', `/webhook?channels=${channel}`, {
@@ -57,6 +57,7 @@ describe('live', () => {
     it.each([
         ['smtp-587', 'plain text', false],
         ['smtp-465', 'HTML', true],
+        ['gmail', 'HTML', true],
     ])('gets mail through %s as %s accepted', async (channel, _, html) => {
         expect(await send(channel, html)).toEqual({ messages: [{ delivered: [channel], failed: [] }] })
     }, 30_000)

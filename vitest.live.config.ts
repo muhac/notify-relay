@@ -10,6 +10,11 @@ const NAMES = [
     'LIVE_SMTP_PASSWORD',
     'LIVE_SMTP_FROM',
     'LIVE_SMTP_TO',
+    'LIVE_GMAIL_CLIENT_ID',
+    'LIVE_GMAIL_CLIENT_SECRET',
+    'LIVE_GMAIL_REFRESH_TOKEN',
+    'LIVE_GMAIL_FROM',
+    'LIVE_GMAIL_TO',
 ] as const
 
 const missing = NAMES.filter((name) => !process.env[name])
@@ -17,6 +22,7 @@ if (missing.length > 0) throw new Error(`missing ${missing.join(', ')}`)
 const live = Object.fromEntries(NAMES.map((name) => [name, process.env[name]!])) as Record<(typeof NAMES)[number], string>
 
 const { GITHUB_SHA, GITHUB_SERVER_URL, GITHUB_REPOSITORY, GITHUB_RUN_ID } = process.env
+const repository = GITHUB_RUN_ID ? `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}` : undefined
 
 const smtp = (id: string, port: string) => ({
     [`CHANNEL_${id}_TYPE`]: 'smtp',
@@ -40,9 +46,16 @@ export default defineConfig({
                     CHANNEL_LOKI_TOKEN: live.LIVE_LOKI_TOKEN,
                     ...smtp('SMTP_587', '587'),
                     ...smtp('SMTP_465', '465'),
+                    CHANNEL_GMAIL_TYPE: 'gmail',
+                    CHANNEL_GMAIL_CLIENT_ID: live.LIVE_GMAIL_CLIENT_ID,
+                    CHANNEL_GMAIL_CLIENT_SECRET: live.LIVE_GMAIL_CLIENT_SECRET,
+                    CHANNEL_GMAIL_REFRESH_TOKEN: live.LIVE_GMAIL_REFRESH_TOKEN,
+                    CHANNEL_GMAIL_FROM: live.LIVE_GMAIL_FROM,
+                    CHANNEL_GMAIL_TO: live.LIVE_GMAIL_TO,
                     TOKEN_LIVE: 'nr_live',
                     LIVE_COMMIT: GITHUB_SHA ?? 'local',
-                    LIVE_RUN: GITHUB_RUN_ID ? `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}` : 'local',
+                    LIVE_COMMIT_URL: repository ? `${repository}/commit/${GITHUB_SHA}` : 'local',
+                    LIVE_RUN_URL: repository ? `${repository}/actions/runs/${GITHUB_RUN_ID}` : 'local',
                 },
             },
         }),
