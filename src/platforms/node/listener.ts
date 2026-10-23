@@ -1,9 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { type AppDeps, handle } from '../../app'
+import { ORIGIN } from '../origin'
 import { fromNode, type Source } from './readable'
-
-// The relay reads only the path and query, so the origin is fixed rather than taken from Host
-const ORIGIN = 'http://relay.invalid'
 
 export function listener(env: object, deps: AppDeps): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
     return async (req, res) => {
