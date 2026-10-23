@@ -1,10 +1,11 @@
 name: Live
 
-# Sends through real channels: Loki, read back afterwards, one SMTP server on 587 and 465, and the
-# Gmail API. Runs on main only, after merges, weekly and by hand, so no unmerged code sees the secrets:
-# a dispatch from another branch is skipped, and the `live` environment holding them admits only main
-# as well. Endpoints and addresses are secrets too, so the public log masks them. Not a required check:
-# a provider outage turns it red without blocking a merge.
+# Sends through real channels and reads each back: Loki through its query API, and mail, sent through
+# one SMTP server on 587 and 465 and through the Gmail API, over IMAP. Runs on main only, after merges,
+# weekly and by hand, so no unmerged code sees the secrets: a dispatch from another branch is skipped,
+# and the `live` environment holding them admits only main as well. Endpoints and addresses are secrets
+# too, so the public log masks them. Not a required check: a provider outage turns it red without
+# blocking a merge.
 
 on:
   push:
@@ -57,4 +58,7 @@ jobs:
           LIVE_GMAIL_REFRESH_TOKEN: ${{ secrets.LIVE_GMAIL_REFRESH_TOKEN }}
           LIVE_GMAIL_FROM: ${{ secrets.LIVE_GMAIL_FROM }}
           LIVE_GMAIL_TO: ${{ secrets.LIVE_GMAIL_TO }}
+          LIVE_IMAP_HOST: ${{ secrets.LIVE_IMAP_HOST }}
+          LIVE_IMAP_USER: ${{ secrets.LIVE_IMAP_USER }}
+          LIVE_IMAP_PASSWORD: ${{ secrets.LIVE_IMAP_PASSWORD }}
         run: npm run test:live

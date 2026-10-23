@@ -15,6 +15,9 @@ const NAMES = [
     'LIVE_GMAIL_REFRESH_TOKEN',
     'LIVE_GMAIL_FROM',
     'LIVE_GMAIL_TO',
+    'LIVE_IMAP_HOST',
+    'LIVE_IMAP_USER',
+    'LIVE_IMAP_PASSWORD',
 ] as const
 
 const missing = NAMES.filter((name) => !process.env[name])
@@ -52,6 +55,9 @@ export default defineConfig({
                     CHANNEL_GMAIL_REFRESH_TOKEN: live.LIVE_GMAIL_REFRESH_TOKEN,
                     CHANNEL_GMAIL_FROM: live.LIVE_GMAIL_FROM,
                     CHANNEL_GMAIL_TO: live.LIVE_GMAIL_TO,
+                    LIVE_IMAP_HOST: live.LIVE_IMAP_HOST,
+                    LIVE_IMAP_USER: live.LIVE_IMAP_USER,
+                    LIVE_IMAP_PASSWORD: live.LIVE_IMAP_PASSWORD,
                     TOKEN_LIVE: 'nr_live',
                     LIVE_COMMIT: GITHUB_SHA ?? 'local',
                     LIVE_COMMIT_URL: repository ? `${repository}/commit/${GITHUB_SHA}` : 'local',
