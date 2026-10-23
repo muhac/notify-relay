@@ -50,8 +50,7 @@ describe('gmail', () => {
         await gmail.send(message, params, ctx)
 
         expect(requests.map((r) => `${r.method} ${r.url}`)).toEqual([`POST ${TOKEN_URL}`, `POST ${SEND_URL}`])
-        const form = new URLSearchParams(await requests[0]!.text())
-        expect(Object.fromEntries(form)).toEqual({
+        expect(Object.fromEntries(await requests[0]!.formData())).toEqual({
             client_id: 'client.apps.example',
             client_secret: 'csecret',
             refresh_token: 'rtoken',
