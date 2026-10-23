@@ -6,8 +6,8 @@ export interface Mailbox {
     password: string
 }
 
-// The sender's copies carry the same subject in \Sent, \Drafts and the virtual folders that gather mail
-// from others, such as \All, so only the remaining folders count
+// A mailbox that also sends keeps its copies, under the same subject, in \Sent, \Drafts and the virtual
+// folders that gather mail from others, such as \All, so only the remaining folders count
 const SKIPPED = ['\\Noselect', '\\NonExistent', '\\Sent', '\\Drafts', '\\Trash', '\\All', '\\Flagged', '\\Important']
 
 export async function arrival(mailbox: Mailbox, subject: string): Promise<string[] | undefined> {

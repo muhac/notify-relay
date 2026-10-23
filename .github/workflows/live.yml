@@ -59,4 +59,6 @@ jobs:
           LIVE_GMAIL_FROM: ${{ secrets.LIVE_GMAIL_FROM }}
           LIVE_GMAIL_TO: ${{ secrets.LIVE_GMAIL_TO }}
           LIVE_IMAP_HOST: ${{ secrets.LIVE_IMAP_HOST }}
+          LIVE_IMAP_USER: ${{ secrets.LIVE_IMAP_USER }}
+          LIVE_IMAP_PASSWORD: ${{ secrets.LIVE_IMAP_PASSWORD }}
         run: npm run test:live
