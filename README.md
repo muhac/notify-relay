@@ -303,8 +303,8 @@ aws lambda add-permission --function-name notify-relay --statement-id function-i
 - Settings are the function's environment variables, as on Node: `env.json` is
   `{"Variables": {"TOKEN_GITHUB": "nr_...", ...}}`. Lambda allows 4 KB of them in all.
 - `--auth-type NONE` leaves authentication to the relay's tokens; with `AWS_IAM`, senders would have to
-  sign their requests. The URL still needs a resource policy that lets anyone call it, which the console
-  adds by itself; check AWS's Function URL documentation for what your account requires.
+  sign their requests. The two `add-permission` statements are the resource policy a public URL needs,
+  which the console creates by itself; without either, the URL answers 403.
 - The timeout must cover the slowest delivery: up to 5 seconds per channel attempt, with fallbacks tried
   one after another. Lambda's default of 3 seconds is too short.
 - A function reaches a private network only from inside a VPC, and AWS blocks port 25 unless asked.
@@ -314,14 +314,14 @@ aws lambda add-permission --function-name notify-relay --statement-id function-i
 TypeScript, with no runtime dependencies. The core (`src/app.ts`, `src/core`, `src/inbound`,
 `src/outbound`) uses only web-standard APIs such as `fetch`, `crypto` and streams. Each platform's entry
 under `src/platforms` adapts its runtime to the core and passes in a TCP `connect`: `cloudflare:sockets`
-on Workers, `node:net` and `node:tls` on Node. The toolchain (wrangler, esbuild, vitest with Cloudflare's
-plugin, typescript) is development-only. Node 24.
+on Workers, `node:net` and `node:tls` on Node and Lambda. The toolchain (wrangler, esbuild, vitest with
+Cloudflare's plugin, typescript) is development-only. Node 24.
 
 ```bash
 npm ci
 npm test            # vitest: the core on both Workers (Miniflare) and Node, and each platform's own
 npm run typecheck   # wrangler types, then tsc over src and test, with Workers' types and with Node's
-npm run build       # bundles for Workers (wrangler deploy --dry-run, no credentials) and for Node
+npm run build       # bundles for Workers (wrangler deploy --dry-run, no credentials), Node and Lambda
 npm run dev         # a local Worker
 ```
 
