@@ -126,11 +126,14 @@ describe('POST /webhook', () => {
 
     it('refuses a declared Content-Length over 64 KB without reading the body', async () => {
         const { send } = setup()
-        const response = await send('/webhook?channels=loki', {
+        // Node requires duplex for a streamed body, and Workers' RequestInit does not declare it
+        const init = {
             method: 'POST',
             headers: { authorization: 'Bearer nr_github', 'content-length': String(64 * 1024 + 1) },
             body: new ReadableStream({ pull: () => new Promise<void>(() => {}) }),
-        })
+            duplex: 'half',
+        }
+        const response = await send('/webhook?channels=loki', init)
         expect(response.status).toBe(413)
     })
 
