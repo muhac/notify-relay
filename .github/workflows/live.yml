@@ -1,11 +1,11 @@
 name: Live
 
 # Sends through real channels and reads each back: Loki through its query API, and mail, sent through
-# one SMTP server on 587 and 465 and through the Gmail API, over IMAP. Runs on main only, after merges,
-# weekly and by hand, so no unmerged code sees the secrets: a dispatch from another branch is skipped,
-# and the `live` environment holding them admits only main as well. Endpoints and addresses are secrets
-# too, so the public log masks them. Not a required check: a provider outage turns it red without
-# blocking a merge.
+# one SMTP server on 587 and 465 and through the Gmail API, over IMAP. It runs once on the Workers
+# runtime and once through the container image. Runs on main only, after merges, weekly and by hand, so
+# no unmerged code sees the secrets: a dispatch from another branch is skipped, and the `live`
+# environment holding them admits only main as well. Endpoints and addresses are secrets too, so the
+# public log masks them. Not a required check: a provider outage turns it red without blocking a merge.
 
 on:
   push:
@@ -22,9 +22,13 @@ concurrency:
 
 jobs:
   live:
-    name: live
+    name: live (${{ matrix.target }})
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [ workers, docker ]
     environment: live
     env:
       WRANGLER_SEND_METRICS: 'false'
@@ -43,8 +47,13 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Build image
+        if: matrix.target == 'docker'
+        run: docker build --tag notify-relay:live .
+
       - name: Live test
         env:
+          LIVE_IMAGE: ${{ matrix.target == 'docker' && 'notify-relay:live' || '' }}
           LIVE_LOKI_URL: ${{ secrets.LIVE_LOKI_URL }}
           LIVE_LOKI_USER: ${{ secrets.LIVE_LOKI_USER }}
           LIVE_LOKI_TOKEN: ${{ secrets.LIVE_LOKI_TOKEN }}

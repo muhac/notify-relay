@@ -308,8 +308,9 @@ still passes, with a warning. Each body links the commit and the run. It needs `
 `LIVE_LOKI_USER` and `LIVE_LOKI_TOKEN` (`logs:write` and `logs:read`); `LIVE_SMTP_HOST`,
 `LIVE_SMTP_USER`, `LIVE_SMTP_PASSWORD`, `LIVE_SMTP_FROM` and `LIVE_SMTP_TO`; `LIVE_GMAIL_CLIENT_ID`,
 `LIVE_GMAIL_CLIENT_SECRET`, `LIVE_GMAIL_REFRESH_TOKEN`, `LIVE_GMAIL_FROM` and `LIVE_GMAIL_TO`; and
-`LIVE_IMAP_HOST`, `LIVE_IMAP_USER` and `LIVE_IMAP_PASSWORD`. The [Live](.github/workflows/live.yml)
-workflow runs it on `main`, weekly and by hand.
+`LIVE_IMAP_HOST`, `LIVE_IMAP_USER` and `LIVE_IMAP_PASSWORD`. With `LIVE_IMAGE` naming an image, the relay
+under test is a container of it, given the same settings, instead of the Worker. The
+[Live](.github/workflows/live.yml) workflow runs it both ways on `main`, weekly and by hand.
 
 ### Adding an adapter
 

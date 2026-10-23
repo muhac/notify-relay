@@ -7,9 +7,10 @@ import { arrival } from './imap'
 const run = crypto.randomUUID()
 const vars = env as unknown as Record<string, string>
 const mailbox = { host: vars.LIVE_IMAP_HOST!, user: vars.LIVE_IMAP_USER!, password: vars.LIVE_IMAP_PASSWORD! }
-const title = (channel: string) => `notify-relay live test ${run} via ${channel}`
+const title = (channel: string) => `notify-relay live test ${run} via ${channel} on ${vars.LIVE_TARGET}`
 
 async function call(method: string, path: string, init: RequestInit<IncomingRequestCfProperties> = {}): Promise<Response> {
+    if (vars.LIVE_RELAY_URL) return fetch(new URL(path, vars.LIVE_RELAY_URL), { method, ...init })
     const request = new Request<unknown, IncomingRequestCfProperties>(`https://notify.example${path}`, { method, ...init })
     const ctx = createExecutionContext()
     const response = await worker.fetch(request, env, ctx)
@@ -18,7 +19,7 @@ async function call(method: string, path: string, init: RequestInit<IncomingRequ
 }
 
 async function send(channel: string, html = false): Promise<unknown> {
-    const what = `Sent through ${channel} by the live test, ${html ? 'as HTML with a plain-text alternative' : 'as plain text'}.`
+    const what = `Sent through ${channel} on ${vars.LIVE_TARGET} by the live test, ${html ? 'as HTML with a plain-text alternative' : 'as plain text'}.`
     const message = {
         title: title(channel),
         text: `${what}\nCommit: ${vars.LIVE_COMMIT_URL}\nRun: ${vars.LIVE_RUN_URL}`,
