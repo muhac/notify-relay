@@ -8,7 +8,7 @@ const env = {
     CHANNEL_LOKI_USER: '123456',
     CHANNEL_LOKI_TOKEN: 'glc_secret',
     TOKEN_GITHUB: 'nr_github',
-} as unknown as Env
+}
 
 function setup(lokiStatus = 204, overrides: Record<string, string | undefined> = {}) {
     const pushed: unknown[] = []
@@ -20,14 +20,14 @@ function setup(lokiStatus = 204, overrides: Record<string, string | undefined> =
             pushed.push(await request.json())
             return new Response(null, { status: lokiStatus })
         },
-        connect: (): Socket => {
+        connect: (): never => {
             throw new Error('loki does not connect')
         },
         now: () => 1_760_000_000_000,
         sleep: async () => {},
     }
     const send = (path: string, init: RequestInit = {}) =>
-        handle(new Request(`https://notify.example${path}`, init), { ...env, ...overrides } as Env, deps)
+        handle(new Request(`https://notify.example${path}`, init), { ...env, ...overrides }, deps)
     return { pushed, urls, send }
 }
 
@@ -167,7 +167,7 @@ describe('recipients a message names in to', () => {
                 }
                 return new Response(null, { status: 204 })
             },
-            connect: (): Socket => {
+            connect: (): never => {
                 throw new Error('gmail does not connect')
             },
             now: () => 1_760_000_000_000,
@@ -175,7 +175,7 @@ describe('recipients a message names in to', () => {
         }
         const channels = { ...env, ...mail('MAIL', 'me@example.com'), ...mail('SPARE', 'spare@example.com'), ...extra }
         const send = (path: string, body: unknown) =>
-            handle(new Request(`https://notify.example${path}`, authorized(body)), channels as unknown as Env, deps)
+            handle(new Request(`https://notify.example${path}`, authorized(body)), channels, deps)
         return { requests, to, send }
     }
 

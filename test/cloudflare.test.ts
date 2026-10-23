@@ -1,7 +1,7 @@
 import { createExecutionContext, waitOnExecutionContext } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import worker from '../src/index'
+import worker from '../src/platforms/cloudflare'
 
 async function call(
     method: string,

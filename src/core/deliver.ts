@@ -2,9 +2,22 @@ import type { Channel } from './channels'
 import { RateLimited } from './http'
 import type { Message } from './message'
 
+// The subset of Cloudflare's sockets API that smtp uses, so its connect() fits as is
+export interface Connection {
+    readonly readable: ReadableStream<Uint8Array>
+    readonly writable: WritableStream<Uint8Array>
+    startTls(): Connection
+    close(): Promise<void>
+}
+
+export type Connect = (
+    address: { hostname: string; port: number },
+    options: { secureTransport: 'on' | 'starttls'; allowHalfOpen: boolean },
+) => Connection
+
 export interface SendContext {
     fetch: typeof fetch
-    connect: (address: SocketAddress, options: SocketOptions) => Socket
+    connect: Connect
     now: () => number
     signal: AbortSignal
     channel: string
@@ -21,7 +34,7 @@ export interface Outbound {
 export interface Deps {
     channels: Map<string, Channel>
     fetch: typeof fetch
-    connect: SendContext['connect']
+    connect: Connect
     now: () => number
     sleep: (ms: number) => Promise<void>
     timeoutMs?: number

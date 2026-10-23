@@ -1,7 +1,7 @@
 import { createExecutionContext, waitOnExecutionContext } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
-import worker from '../../src/index'
+import worker from '../../src/platforms/cloudflare'
 import { arrival } from './imap'
 
 const run = crypto.randomUUID()

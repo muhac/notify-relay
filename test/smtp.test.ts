@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { Connect, Connection } from '../src/core/deliver'
 import type { Message } from '../src/core/message'
 import { smtp } from '../src/outbound/smtp'
 import { decode, parseMail } from './mail'
@@ -40,12 +41,12 @@ const DEFAULT_REPLIES: Replies = {
 function server(overrides: Replies = {}, { bytewise = false } = {}) {
     const replies = { ...DEFAULT_REPLIES, ...overrides }
     const sent: { line: string; tls: boolean }[] = []
-    const connections: { address: SocketAddress; options: SocketOptions }[] = []
+    const connections: { address: Parameters<Connect>[0]; options: Parameters<Connect>[1] }[] = []
     let closes = 0
     const encoder = new TextEncoder()
     const decoder = new TextDecoder()
 
-    function socket(tls: boolean, greet: boolean): Socket {
+    function socket(tls: boolean, greet: boolean): Connection {
         let reply = (_: string | null) => {}
         let ended = false
         const readable = new ReadableStream<Uint8Array>({
@@ -80,13 +81,9 @@ function server(overrides: Replies = {}, { bytewise = false } = {}) {
                 }
             },
         })
-        const self = {
+        const self: Connection = {
             readable,
             writable,
-            closed: Promise.resolve(),
-            opened: Promise.resolve({}),
-            upgraded: tls,
-            secureTransport: tls ? 'on' : 'starttls',
             close: async () => {
                 closes++
                 reply(null)
@@ -94,10 +91,10 @@ function server(overrides: Replies = {}, { bytewise = false } = {}) {
             startTls: () => socket(true, false),
         }
         if (greet) queueMicrotask(() => reply(replies.greeting ?? null))
-        return self as unknown as Socket
+        return self
     }
 
-    const connect = (address: SocketAddress, options: SocketOptions) => {
+    const connect: Connect = (address, options) => {
         connections.push({ address, options })
         return socket(options.secureTransport === 'on', true)
     }

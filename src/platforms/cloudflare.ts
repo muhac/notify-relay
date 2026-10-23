@@ -1,5 +1,5 @@
 import { connect } from 'cloudflare:sockets'
-import { handle } from './app'
+import { handle } from '../app'
 
 export default {
     async fetch(request, env, _ctx): Promise<Response> {

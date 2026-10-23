@@ -1,6 +1,6 @@
 import { authenticate, hasSources } from './core/auth'
 import { type Channel, resolveChannels } from './core/channels'
-import { deliver, type Outcome, type SendContext } from './core/deliver'
+import { type Connect, deliver, type Outcome } from './core/deliver'
 import { BadRequest } from './core/http'
 import type { Inbound } from './core/message'
 import { parseChannels } from './core/query'
@@ -9,7 +9,7 @@ import { adapters } from './outbound'
 
 export interface AppDeps {
     fetch: typeof fetch
-    connect: SendContext['connect']
+    connect: Connect
     now: () => number
     sleep: (ms: number) => Promise<void>
 }
@@ -19,7 +19,7 @@ const MAX_BODY_BYTES = 64 * 1024
 const inbounds: Record<string, Inbound> = { '/webhook': webhook }
 
 // Token first: an unauthenticated caller learns nothing from validation and never has its body read
-export async function handle(request: Request, env: Env, deps: AppDeps): Promise<Response> {
+export async function handle(request: Request, env: object, deps: AppDeps): Promise<Response> {
     const url = new URL(request.url)
     if (url.pathname === '/healthz') {
         if (request.method !== 'GET') return methodNotAllowed('GET')
@@ -63,7 +63,7 @@ export async function handle(request: Request, env: Env, deps: AppDeps): Promise
     )
 }
 
-function ready(channels: Map<string, Channel>, env: Env): boolean {
+function ready(channels: Map<string, Channel>, env: object): boolean {
     const configured = [...channels.values()]
     const complete = configured.every((channel) => channel.adapter !== undefined && channel.missing.length === 0)
     return configured.length > 0 && complete && hasSources(env)
