@@ -1,0 +1,5 @@
+{
+    "name": "notify-relay",
+    "private": true,
+    "main": "index.js"
+}
