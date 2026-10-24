@@ -332,19 +332,48 @@ aws lambda add-permission --function-name notify-relay --statement-id function-i
   one after another. Lambda's default of 3 seconds is too short.
 - A function reaches a private network only from inside a VPC, and AWS blocks port 25 unless asked.
 
+### Azure Functions
+
+An HTTP function on the Node.js v4 programming model, in the Flex Consumption plan. `npm run build:azure`
+writes the deploy package to `dist/azure`: the bundle, which holds `@azure/functions`, and the
+`host.json` and `package.json` the host reads.
+
+```bash
+npm ci
+npm run build:azure
+(cd dist/azure && zip ../azure.zip host.json package.json index.js)
+az functionapp create --name <app> --resource-group <group> --storage-account <account> \
+    --flexconsumption-location <region> --runtime node --runtime-version 24
+az functionapp config appsettings set --name <app> --resource-group <group> \
+    --settings FUNCTIONS_REQUEST_BODY_SIZE_LIMIT=1048576 @settings.json
+az functionapp deployment source config-zip --name <app> --resource-group <group> --src dist/azure.zip
+```
+
+- Settings are the app's application settings, which the function sees as environment variables, as on
+  Node: `settings.json` is `{"TOKEN_GITHUB": "nr_...", ...}`, with every value a string.
+- The function takes every path and method under the app's root, without the usual `/api` prefix, and
+  as `anonymous`, leaving authentication to the relay's tokens.
+- The host reads a body that comes with a length into memory before the function runs, up to 100 MB by
+  default. `FUNCTIONS_REQUEST_BODY_SIZE_LIMIT` bounds that: up to 1 MB, a body over 64 KB still gets the
+  relay's 413; past it, the host answers an empty 500. A chunked body streams to the function, which
+  turns on HTTP streams because the host would otherwise hand it over empty.
+- A private network, and port 25 on the subscription types Azure allows it, are reachable only through
+  virtual network integration.
+
 ## Development
 
-TypeScript, with no runtime dependencies. The core (`src/app.ts`, `src/core`, `src/inbound`,
-`src/outbound`) uses only web-standard APIs such as `fetch`, `crypto` and streams. Each platform's entry
-under `src/platforms` adapts its runtime to the core and passes in a TCP `connect`: `cloudflare:sockets`
-on Workers, `node:net` and `node:tls` on Node and Lambda. The toolchain (wrangler, esbuild, vitest with
-Cloudflare's plugin, typescript) is development-only. Node 24.
+TypeScript, with no runtime dependencies, except that the Azure bundle holds `@azure/functions`, through
+which the host calls a function. The core (`src/app.ts`, `src/core`, `src/inbound`, `src/outbound`) uses
+only web-standard APIs such as `fetch`, `crypto` and streams. Each platform's entry under
+`src/platforms` adapts its runtime to the core and passes in a TCP `connect`: `cloudflare:sockets` on
+Workers, `node:net` and `node:tls` on Node, Lambda and Azure. The toolchain (wrangler, esbuild, vitest
+with Cloudflare's plugin, typescript) is development-only. Node 24.
 
 ```bash
 npm ci
 npm test            # vitest: the core on both Workers (Miniflare) and Node, and each platform's own
 npm run typecheck   # wrangler types, then tsc over src and test, with Workers' types and with Node's
-npm run build       # bundles for Workers (wrangler deploy --dry-run, no credentials), Node and Lambda
+npm run build       # bundles for Workers (wrangler deploy --dry-run, no credentials), Node, Lambda, Azure
 npm run dev         # a local Worker
 ```
 
@@ -354,7 +383,9 @@ fake `fetch` or a scripted fake server receives instead of mocking globals. The 
 on the path, to make a throwaway certificate. `test/docker/smoke.sh <image>` runs a built image as a
 deployment would and checks it serves, runs as a user other than root, passes its `HEALTHCHECK` and stops
 cleanly on `docker stop`. `test/lambda/smoke.sh [dist/lambda]` runs the Lambda bundle in AWS's Node 24
-base image, whose Runtime Interface Emulator invokes it as Lambda would.
+base image, whose Runtime Interface Emulator invokes it as Lambda would. `test/azure/smoke.sh
+[dist/azure]` runs the Azure package in Microsoft's Functions host image for Node 24, with bodies sent
+with a length and chunked, and one past the host's limit.
 
 `npm run test:live` sends through real channels instead: a Loki push that it then reads back, mail to one
 SMTP server, plain text over 587 and HTML over 465, and HTML mail through the Gmail API. Mail passes once
