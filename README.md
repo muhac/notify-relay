@@ -288,12 +288,17 @@ source and billed the same way, so on Google Cloud the image is also the serverl
 
 ```bash
 gcloud run deploy notify-relay --image ghcr.io/therank/notify-relay:sha-<commit> \
-    --region <region> --allow-unauthenticated --env-vars-file env.yaml
+    --region <region> --allow-unauthenticated --env-vars-file relay.env \
+    --startup-probe httpGet.path=/healthz
 ```
 
-- Settings are the service's environment variables: `env.yaml` holds one `NAME: value` per line. Quote
-  values YAML would read otherwise, such as `CHANNEL_MAIL_ALLOW_TO: '*@example.com'`.
+- Settings come from the same `relay.env` as `docker run`, without `PORT`, which Cloud Run sets itself.
+  gcloud reads a file ending in `.env` with python-dotenv, which, unlike Docker, drops quotes and a
+  trailing ` #` comment and expands `${NAME}`; plain values mean the same to both.
 - `--allow-unauthenticated` leaves authentication to the relay's tokens.
+- Cloud Run ignores the image's `HEALTHCHECK` and by default only waits for the port to open. The startup
+  probe holds a revision back until `/healthz` answers 200, so a deploy with incomplete settings fails
+  instead of taking traffic.
 - Each revision keeps the image it was deployed with, and Cloud Run caches GHCR images for up to an hour,
   so deploy a `sha-<commit>`. For higher availability, Google recommends pulling through an Artifact
   Registry remote repository.
