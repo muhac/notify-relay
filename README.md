@@ -281,6 +281,24 @@ docker run --publish 8080:8080 --env-file relay.env ghcr.io/therank/notify-relay
 - Its `HEALTHCHECK` probes `/healthz`, so a relay that is not ready shows as unhealthy. A platform that
   probes on its own can point at `/healthz` as well.
 
+#### Cloud Run
+
+Cloud Run deploys public GHCR images directly. A Cloud Run function is a Cloud Run service built from
+source and billed the same way, so on Google Cloud the image is also the serverless deploy:
+
+```bash
+gcloud run deploy notify-relay --image ghcr.io/therank/notify-relay:sha-<commit> \
+    --region <region> --allow-unauthenticated --env-vars-file env.yaml
+```
+
+- Settings are the service's environment variables: `env.yaml` holds one `NAME: value` per line. Quote
+  values YAML would read otherwise, such as `CHANNEL_MAIL_ALLOW_TO: '*@example.com'`.
+- `--allow-unauthenticated` leaves authentication to the relay's tokens.
+- Each revision keeps the image it was deployed with, and Cloud Run caches GHCR images for up to an hour,
+  so deploy a `sha-<commit>`. For higher availability, Google recommends pulling through an Artifact
+  Registry remote repository.
+- Google Cloud blocks port 25. A private network is reachable through Direct VPC egress or a connector.
+
 ### AWS Lambda
 
 A function behind a Function URL or an HTTP API, which send events in payload format 2.0. REST APIs send
